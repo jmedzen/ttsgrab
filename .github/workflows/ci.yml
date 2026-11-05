@@ -50,23 +50,33 @@ jobs:
           enable-cache: true
       - name: Install ffmpeg
         # apt has hung on the runner's mirror for 20+ minutes, twice, on one matrix leg
-        # while the other passed.
+        # while the other passed. Two lessons from that:
         #
-        # The step timeout alone was not enough: it bounded the *whole* retry loop, so a
-        # stall on attempt 1 consumed the budget and the retries never ran. Each attempt is
-        # now bounded individually, and the step budget exceeds the sum of them.
-        timeout-minutes: 12
+        # 1. The cheapest way to survive a broken apt mirror is not to need apt. If ffmpeg is
+        #    already on the image, use it and never touch the network.
+        # 2. A step timeout bounds the *whole* retry loop, so a stall on attempt 1 used to
+        #    consume the budget and the retries never ran — a retry that cannot happen reads
+        #    as handled. Each attempt now has its own bound, and the budget (18 min) is above
+        #    the worst case of the loop that follows (16.3 min).
+        timeout-minutes: 18
         run: |
-          for attempt in 1 2 3; do
-            if timeout 180 sudo apt-get update -o Acquire::Retries=1 \
-               && timeout 240 sudo apt-get install -y --no-install-recommends ffmpeg; then
+          if ffmpeg -version >/dev/null 2>&1; then
+            echo "ffmpeg already present:"; ffmpeg -version | head -1
+            exit 0
+          fi
+          # First attempt is generous (a slow-but-working mirror should succeed); the
+          # retries are short, because what we are retrying is a fast failure.
+          for bounds in "240 420" "60 90" "60 90"; do
+            set -- $bounds
+            if timeout "$1" sudo apt-get update -o Acquire::Retries=1 \
+               && timeout "$2" sudo apt-get install -y --no-install-recommends ffmpeg; then
               ffmpeg -version | head -1
               exit 0
             fi
-            echo "apt attempt $attempt failed or timed out; retrying in 10s" >&2
+            echo "apt attempt ($1s/$2s) failed or timed out; retrying in 10s" >&2
             sleep 10
           done
-          echo "apt-get could not install ffmpeg after 3 bounded attempts" >&2
+          echo "could not obtain ffmpeg after 3 bounded attempts" >&2
           exit 1
       - name: Create venv
         run: uv venv --python ${{ matrix.python }}
@@ -114,23 +124,33 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install ffmpeg
         # apt has hung on the runner's mirror for 20+ minutes, twice, on one matrix leg
-        # while the other passed.
+        # while the other passed. Two lessons from that:
         #
-        # The step timeout alone was not enough: it bounded the *whole* retry loop, so a
-        # stall on attempt 1 consumed the budget and the retries never ran. Each attempt is
-        # now bounded individually, and the step budget exceeds the sum of them.
-        timeout-minutes: 12
+        # 1. The cheapest way to survive a broken apt mirror is not to need apt. If ffmpeg is
+        #    already on the image, use it and never touch the network.
+        # 2. A step timeout bounds the *whole* retry loop, so a stall on attempt 1 used to
+        #    consume the budget and the retries never ran — a retry that cannot happen reads
+        #    as handled. Each attempt now has its own bound, and the budget (18 min) is above
+        #    the worst case of the loop that follows (16.3 min).
+        timeout-minutes: 18
         run: |
-          for attempt in 1 2 3; do
-            if timeout 180 sudo apt-get update -o Acquire::Retries=1 \
-               && timeout 240 sudo apt-get install -y --no-install-recommends ffmpeg; then
+          if ffmpeg -version >/dev/null 2>&1; then
+            echo "ffmpeg already present:"; ffmpeg -version | head -1
+            exit 0
+          fi
+          # First attempt is generous (a slow-but-working mirror should succeed); the
+          # retries are short, because what we are retrying is a fast failure.
+          for bounds in "240 420" "60 90" "60 90"; do
+            set -- $bounds
+            if timeout "$1" sudo apt-get update -o Acquire::Retries=1 \
+               && timeout "$2" sudo apt-get install -y --no-install-recommends ffmpeg; then
               ffmpeg -version | head -1
               exit 0
             fi
-            echo "apt attempt $attempt failed or timed out; retrying in 10s" >&2
+            echo "apt attempt ($1s/$2s) failed or timed out; retrying in 10s" >&2
             sleep 10
           done
-          echo "apt-get could not install ffmpeg after 3 bounded attempts" >&2
+          echo "could not obtain ffmpeg after 3 bounded attempts" >&2
           exit 1
       - name: Install python deps
         run: uv venv --python 3.12 && uv pip install -e ".[dev,mcp]"
