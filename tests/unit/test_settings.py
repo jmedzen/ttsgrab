@@ -224,3 +224,64 @@ def test_undeclared_variables_are_ignored_not_fatal(
     clean environment."""
     monkeypatch.setenv("TTSGRAB_NOT_A_REAL_SETTING", "x")
     assert load_settings(tmp_path / "absent.yaml") is not None
+
+
+def _settings_env_names() -> set[str]:
+    from pydantic import BaseModel
+
+    from ttsgrab.settings import Settings
+
+    def walk(model: type[BaseModel], prefix: str = "") -> set[str]:
+        names: set[str] = set()
+        for field_name, field in model.model_fields.items():
+            path = f"{prefix}{field_name}".upper()
+            names.add("TTSGRAB_" + path.replace(".", "__"))
+            annotation = field.annotation
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                names |= walk(annotation, path + ".")
+        return names
+
+    return walk(Settings)
+
+
+def test_compose_passes_only_real_variables_to_containers() -> None:
+    """The left-hand side of a compose environment mapping goes straight into the container,
+    so an invented name there is silently ignored at runtime — a configured-looking setting
+    that does nothing."""
+    import re
+
+    valid = _settings_env_names()
+    # Read by environments other than the gateway: worker images pick up TTSGRAB_DEVICE,
+    # and the Caddy service reads TTSGRAB_DOMAIN.
+    not_gateway_settings = {"TTSGRAB_DEVICE", "TTSGAB_DEVICE", "TTSGRAB_DOMAIN"}
+
+    problems: list[str] = []
+    for name in ("docker-compose.yml", "docker-compose.distributed.yml"):
+        text = (REPO_ROOT / name).read_text(encoding="utf-8")
+        for key in re.findall(r"^\s+(TTSGRAB_[A-Z0-9_]+):", text, flags=re.MULTILINE):
+            if key not in valid and key not in not_gateway_settings:
+                problems.append(f"{name}: {key}")
+    assert problems == [], f"unknown container env vars: {problems}"
+
+
+def test_every_profile_can_start_the_gateway() -> None:
+    """core, gpu and cpu-local must each include the gateway, or `--profile gpu up` would
+    start workers with nothing to talk to."""
+    compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    gateway = compose["services"]["gateway"]
+    assert {"core", "gpu", "cpu-local"} <= set(gateway["profiles"])
+
+
+def test_gpu_workers_require_the_nvidia_runtime() -> None:
+    compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    for name in ("kokoro", "cosyvoice"):
+        devices = (
+            compose["services"][name]
+            .get("deploy", {})
+            .get("resources", {})
+            .get("reservations", {})
+            .get("devices", [])
+        )
+        assert devices, f"{name} is a GPU service but reserves no device"
+        assert devices[0]["driver"] == "nvidia"
+        assert "gpu" in compose["services"][name]["profiles"]
