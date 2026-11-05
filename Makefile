@@ -136,3 +136,13 @@ clean: ## Remove build artefacts and caches
 .PHONY: smoke
 smoke: ## Hit the running gateway and check the acceptance path
 	@bash scripts/smoke.sh
+
+.PHONY: migrate
+migrate: ## Apply database migrations (use before upgrading an existing install)
+	$(VENV)/bin/python -m alembic upgrade head
+
+.PHONY: migration
+migration: ## Autogenerate a migration from model changes: make migration m="add foo"
+	@test -n "$(m)" || { echo 'usage: make migration m="what changed"'; exit 1; }
+	$(VENV)/bin/python -m alembic revision --autogenerate -m "$(m)"
+	@echo "Review the generated file in alembic/versions/ before committing it."

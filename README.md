@@ -1,5 +1,7 @@
 # ttsgrab
 
+[![ci](https://github.com/jmedzen/ttsgrab/actions/workflows/ci.yml/badge.svg)](https://github.com/jmedzen/ttsgrab/actions/workflows/ci.yml)
+
 **One TTS API in front of many engines.** A web UI for listening and tuning, a stable REST
 API for agents, and a Docker command that gets you audio in about five minutes.
 
@@ -294,7 +296,7 @@ Honest status of the acceptance list:
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | `docker compose --profile core up` → Edge TTS audible in UI | ✅ verified natively + e2e; compose file itself unverified here (no Docker on this machine) |
+| 1 | `docker compose --profile core up` → Edge TTS audible in UI | ✅ the gateway **image** is built and smoke-tested in CI: container starts, 322 voices, 16 992 bytes of real audio from Edge, UI served. The full `core` profile with worker containers is still unbuilt here (no Docker on this machine) |
 | 2 | Google credentials → voices appear, usage correct | ⚠️ adapter unit-tested against a mocked API; **not** verified against the live Google API (no account) |
 | 3 | Register LAN worker, then kill it → auto-fallback | ✅ verified end-to-end (`x-ttsgrab-fallback: stub->edge`) |
 | 4 | OpenAI SDK with only `base_url` changed | ✅ verified |
@@ -302,9 +304,16 @@ Honest status of the acceptance list:
 | 6 | Compare page across ≥3 providers | ✅ verified e2e |
 | 7 | No keys in logs, frontend or git history | ✅ log scrubber + secret-pattern smoke check; `gitleaks` in CI |
 
-The two gaps are honest ones: Google's live API needs an account, and Docker is not
-installed on the machine this was built on. Both are covered the moment credentials or
-Docker exist — the code paths are exercised with mocks in the meantime.
+What CI proves on every push: lint, mypy, 127 tests on Python 3.11 and 3.12, the SPA
+typecheck and build, six Playwright tests against a live server, the 13-check smoke script,
+a `linux/amd64` gateway image build, a container boot that synthesises real audio, the CPU
+worker image, and a full-history secret scan.
+
+The remaining gaps are honest ones. Google's live API needs an account this repo does not
+have. Docker is not installed on the machine the project was written on, so the multi-container
+`core` / `gpu` profiles — gateway plus model workers — have never been started together,
+and no GPU worker has ever loaded a model. Those paths are unit-tested against fakes, not
+against reality.
 
 ---
 

@@ -264,8 +264,20 @@ services:
       TTSGRAB_DATABASE_URL: postgresql+asyncpg://ttsgrab:${POSTGRES_PASSWORD}@db:5432/ttsgrab
 ```
 
-Install the driver: `pip install "ttsgrab[postgres]"`. Tables are created on first boot;
-Alembic is wired for versioned migrations (`alembic upgrade head`).
+Install the driver: `pip install "ttsgrab[postgres]"`.
+
+Tables are created on first boot (`create_all`), which is fine for a new install. For an
+existing database, use the versioned migration instead — it records what has been applied,
+so a later schema change is a deliberate step rather than a side effect:
+
+```bash
+alembic upgrade head      # apply; reads TTSGRAB_DATABASE_URL, so migrations and the app
+alembic current           # what revision is applied
+alembic downgrade -1      # back out one revision (destructive on the initial one)
+```
+
+The initial revision was generated from the SQLAlchemy metadata rather than hand-written,
+so it cannot drift from the models.
 
 Mixing engines is a one-way trip for existing data — export history with
 `GET /v1/history` first if you care about it.
