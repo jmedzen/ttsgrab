@@ -114,9 +114,12 @@ test-e2e: ## Run browser tests (needs a server on :8011)
 	cd web && npx playwright test
 
 .PHONY: lint
-lint: ## Ruff + mypy
-	$(VENV)/bin/ruff check src tests workers
-	$(VENV)/bin/mypy src/ttsgrab
+lint: ## Ruff (lint + format) + mypy — the same checks CI runs
+	$(VENV)/bin/ruff check src tests workers alembic
+	# Without this line `make lint` passed while CI failed on formatting, which is the
+	# worst kind of green: it taught me to distrust the local gate.
+	$(VENV)/bin/ruff format --check src tests workers alembic
+	$(VENV)/bin/mypy src/ttsgrab --ignore-missing-imports
 
 .PHONY: fmt
 fmt: ## Format with ruff

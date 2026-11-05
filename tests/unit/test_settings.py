@@ -343,6 +343,6 @@ def test_no_stray_legacy_port_in_startup_commands() -> None:
                 if found != port and found not in (5173,):
                     offenders.append(f"{path.name}: {line.strip()[:90]}")
 
-    assert offenders == [], "documentation points at a port the gateway does not use:\n  " + "\n  ".join(
-        offenders
+    assert offenders == [], (
+        "documentation points at a port the gateway does not use:\n  " + "\n  ".join(offenders)
     )
