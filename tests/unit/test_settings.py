@@ -285,3 +285,64 @@ def test_gpu_workers_require_the_nvidia_runtime() -> None:
         assert devices, f"{name} is a GPU service but reserves no device"
         assert devices[0]["driver"] == "nvidia"
         assert "gpu" in compose["services"][name]["profiles"]
+
+
+def test_the_advertised_port_matches_the_configured_one() -> None:
+    """Every place that names a port must agree, or `make up` prints one address and the
+    gateway listens on another. This drifted the moment the default changed."""
+    import re
+    from pathlib import Path
+
+    from ttsgrab.settings import Settings
+
+    port = Settings.model_fields["port"].default
+    base = f"127.0.0.1:{port}"
+    root = Path(__file__).resolve().parents[2]
+
+    checks = {
+        "src/ttsgrab/settings.py": f'public_base_url: str = "http://{base}"',
+        "web/vite.config.ts": f"'http://{base}'",
+        "docker-compose.yml": f"${{TTSGRAB_PORT:-{port}}}:{port}",
+        "docker-compose.yml#health": f'"http://{base}/healthz"',
+        ".env.example": f"TTSGRAB_PORT={port}",
+        "deploy/caddy/Caddyfile": f"gateway:{port}",
+    }
+    for name, needle in checks.items():
+        path = root / name.split("#")[0]
+        assert path.exists(), f"{name} is missing"
+        assert needle in path.read_text(encoding="utf-8"), (
+            f"{name} does not contain {needle!r}; the default port is {port} and something "
+            "still points somewhere else"
+        )
+
+    # The Makefile prints the URL a user will click, so it must be right too.
+    makefile = (root / "Makefile").read_text(encoding="utf-8")
+    assert f"http://localhost:{port}" in makefile
+    assert re.search(rf"--port {port}\b", makefile), "make dev starts a different port"
+
+
+def test_no_stray_legacy_port_in_startup_commands() -> None:
+    """Guard against a partial edit: a doc telling users to run on the old port."""
+    import re
+    from pathlib import Path
+
+    from ttsgrab.settings import Settings
+
+    port = Settings.model_fields["port"].default
+    root = Path(__file__).resolve().parents[2]
+    offenders: list[str] = []
+
+    for path in list(root.glob("*.md")) + list((root / "docs").glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if f"--port {port}" in line:
+                continue
+            # A localhost/gateway URL on a *different* port than configured.
+            for match in re.finditer(r"(?:localhost|127\.0\.0\.1|gateway):(\d{4})", line):
+                found = int(match.group(1))
+                if found != port and found not in (5173,):
+                    offenders.append(f"{path.name}: {line.strip()[:90]}")
+
+    assert offenders == [], "documentation points at a port the gateway does not use:\n  " + "\n  ".join(
+        offenders
+    )

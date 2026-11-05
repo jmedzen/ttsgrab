@@ -10,7 +10,7 @@ no stdio subprocess, which matters for a containerised deployment.
 
 Run standalone (optional, for clients that prefer a separate process):
     pip install "ttsgrab[mcp]"
-    python -m ttsgrab.mcp_server --url http://127.0.0.1:8000 --token ...
+    python -m ttsgrab.mcp_server --url http://127.0.0.1:8300 --token ...
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def _client() -> tuple[httpx.AsyncClient, str]:
             "http://ttsgrab.internal",
         )
 
-    base = os.environ.get("TTSGRAB_MCP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    base = os.environ.get("TTSGRAB_MCP_BASE_URL", "http://127.0.0.1:8300").rstrip("/")
     return httpx.AsyncClient(base_url=base, headers=headers, timeout=180.0), base
 
 

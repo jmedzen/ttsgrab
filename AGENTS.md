@@ -4,14 +4,14 @@ You are talking to a **unified TTS gateway**. One API over Edge TTS, Google Clou
 Gemini TTS, Azure Speech, and self-hosted model workers. The gateway picks a provider,
 handles fallback, caches audio, and tracks cost.
 
-Default base URL: `http://localhost:8000`
+Default base URL: `http://localhost:8300`
 
 ---
 
 ## The one request you probably want
 
 ```bash
-curl -X POST http://localhost:8000/v1/tts \
+curl -X POST http://localhost:8300/v1/tts \
   -H 'Content-Type: application/json' \
   -d '{"text":"你好，世界","voice":"zh-TW-HsiaoChenNeural"}' \
   --output out.mp3
@@ -128,7 +128,7 @@ has **no** zh-TW voice. Kokoro's Mandarin is weak — its own authors grade it "
 
 ## MCP
 
-If you are an MCP client, mount `http://localhost:8000/mcp/` and use:
+If you are an MCP client, mount `http://localhost:8300/mcp/` and use:
 
 - `synthesize_speech({text, voice, format?, speed?, provider?, policy?})`
 - `list_voices({language?, provider?, free_only?, limit?})`

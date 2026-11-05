@@ -1,6 +1,6 @@
 # ttsgrab — make targets
 #
-# The 80% path is: `make up`, open http://localhost:8000, type, listen.
+# The 80% path is: `make up`, open http://localhost:8300, type, listen.
 # Everything else here is for development or for a GPU box.
 
 SHELL := /bin/bash
@@ -30,10 +30,10 @@ help: ## Show this help
 # -- docker -----------------------------------------------------------------------------
 
 .PHONY: up
-up: .env ## Start the gateway (profile: core). Opens on http://localhost:8000
+up: .env ## Start the gateway (profile: core). Opens on http://localhost:8300
 	$(COMPOSE) --profile $(PROFILE) up -d --build
 	@echo ""
-	@echo "  ttsgrab is starting → http://localhost:$(or $(TTSGRAB_PORT),8000)"
+	@echo "  ttsgrab is starting → http://localhost:$(or $(TTSGRAB_PORT),8300)"
 	@echo "  logs: make logs"
 
 .PHONY: up-gpu
@@ -90,11 +90,11 @@ venv: ## Create the virtualenv and install dev dependencies
 	$(UV) pip install -e ".[dev,mcp,gcp]"
 
 .PHONY: dev
-dev: ## Run the gateway with autoreload on :8000
-	$(VENV)/bin/python -m ttsgrab --reload --port 8000
+dev: ## Run the gateway with autoreload on :8300
+	$(VENV)/bin/python -m ttsgrab --reload --port 8300
 
 .PHONY: web-dev
-web-dev: ## Run the Vite dev server on :5173 (proxies /v1 to :8000)
+web-dev: ## Run the Vite dev server on :5173 (proxies /v1 to :8300)
 	cd web && npm run dev
 
 .PHONY: build-info

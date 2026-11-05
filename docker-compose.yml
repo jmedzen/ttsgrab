@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     ports:
       # Bind to localhost by default; put Caddy/Traefik in front for public access.
-      - "${TTSGRAB_BIND:-127.0.0.1}:${TTSGRAB_PORT:-8000}:8000"
+      - "${TTSGRAB_BIND:-127.0.0.1}:${TTSGRAB_PORT:-8300}:8300"
     environment:
       <<: *common-env
       TTSGRAB_SECURITY__ADMIN_TOKEN: ${TTSGRAB_ADMIN_TOKEN:-}
@@ -58,7 +58,7 @@ services:
         target: google-credentials.json
         mode: 0400
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8300/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3

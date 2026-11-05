@@ -224,7 +224,7 @@ if __name__ == "__main__":
 Register it — no restart of the gateway needed:
 
 ```bash
-curl -X POST http://localhost:8000/v1/workers \
+curl -X POST http://localhost:8300/v1/workers \
   -H "Authorization: Bearer $TTSGRAB_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"xtts","base_url":"http://192.168.1.42:8880","kind":"tts","model_hint":"xtts-v2"}'
@@ -242,7 +242,7 @@ chain, which is what makes a worker crash a degraded experience rather than an o
 `POST /v1/audio/speech`. Register one directly — no adapter code:
 
 ```bash
-curl -X POST http://localhost:8000/v1/workers \
+curl -X POST http://localhost:8300/v1/workers \
   -H "Authorization: Bearer $TTSGRAB_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' -d '{
   "name": "speaches", "base_url": "http://192.168.1.42:8000",

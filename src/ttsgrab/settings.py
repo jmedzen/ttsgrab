@@ -189,14 +189,14 @@ class Settings(BaseSettings):
     app_name: str = "ttsgrab"
     env: Literal["dev", "prod", "test"] = "dev"
     host: str = "127.0.0.1"
-    port: int = 8000
+    port: int = 8300
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "console"
 
     database_url: str = "sqlite+aiosqlite:///./data/ttsgrab.db"
     data_dir: str = "./data"
 
-    public_base_url: str = "http://127.0.0.1:8000"
+    public_base_url: str = "http://127.0.0.1:8300"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     security: SecuritySettings = Field(default_factory=SecuritySettings)

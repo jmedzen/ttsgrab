@@ -35,7 +35,7 @@ git clone https://github.com/jmedzen/ttsgrab && cd ttsgrab
 make up          # or: docker compose --profile core up -d
 ```
 
-Open <http://localhost:8000>, type something, press **Synthesise**. That is Edge TTS, with
+Open <http://localhost:8300>, type something, press **Synthesise**. That is Edge TTS, with
 no account and no key.
 
 Add cloud providers whenever you want them — the gateway boots fine without any:
@@ -55,7 +55,7 @@ Nothing else is required. A missing key is not an error: the provider shows as
 uv venv --python 3.11 .venv && source .venv/bin/activate
 uv pip install -e ".[dev,mcp]"
 cd web && npm install && npm run build && cd ..
-python -m ttsgrab --port 8000
+python -m ttsgrab --port 8300
 ```
 
 Needs `ffmpeg` on `PATH` for format conversion and long-text concatenation. Without it,
@@ -68,7 +68,7 @@ synthesis still works in the provider's native format.
 ### One call
 
 ```bash
-curl -X POST http://localhost:8000/v1/tts \
+curl -X POST http://localhost:8300/v1/tts \
   -H 'Content-Type: application/json' \
   -d '{"text":"你好，世界","voice":"zh-TW-HsiaoChenNeural"}' \
   --output hello.mp3
@@ -140,7 +140,7 @@ Dark mode, 繁體中文 / English, responsive.
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="ttsg_…")
+client = OpenAI(base_url="http://localhost:8300/v1", api_key="ttsg_…")
 with client.audio.speech.with_streaming_response.create(
     model="tts-1", voice="alloy", input="Hello from an unchanged SDK",
 ) as r:
@@ -332,7 +332,7 @@ version bump reports the same number. So there are two:
 
 ```bash
 make build-info        # regenerate build_info.json (make web / make build do it first)
-curl -s localhost:8000/healthz | python3 -m json.tool
+curl -s localhost:8300/healthz | python3 -m json.tool
 ```
 
 ```json
@@ -360,7 +360,7 @@ context has no `.git`.
 ```bash
 make test                                  # pytest: 276 tests, ~76% statement coverage
 make test-e2e                              # Playwright: real synthesis in the browser
-./scripts/smoke.sh http://127.0.0.1:8000   # the acceptance checklist, live
+./scripts/smoke.sh http://127.0.0.1:8300   # the acceptance checklist, live
 ```
 
 `scripts/smoke.sh` walks the brief's acceptance criteria and prints one line per check.
@@ -372,7 +372,7 @@ than a hardcoded assumption — but it does mean a bare `./scripts/smoke.sh` aga
 protected server looks broken. Pass the token:
 
 ```bash
-TTSGRAB_ADMIN_TOKEN=... ./scripts/smoke.sh http://127.0.0.1:8000
+TTSGRAB_ADMIN_TOKEN=... ./scripts/smoke.sh http://127.0.0.1:8300
 ```
 
 Honest status of the acceptance list:
@@ -411,7 +411,7 @@ against reality.
 - [Troubleshooting](docs/troubleshooting.md) — the failures you will actually hit
 - [Audit log](docs/audit.md) — what a security/memory/UX audit found, what was fixed, and
   what is still open. Read this before assuming a guarantee
-- [`/llms.txt`](http://localhost:8000/llms.txt) and [`AGENTS.md`](AGENTS.md) — for agents
+- [`/llms.txt`](http://localhost:8300/llms.txt) and [`AGENTS.md`](AGENTS.md) — for agents
 
 ## Licence
 

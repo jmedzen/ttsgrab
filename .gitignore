@@ -56,3 +56,6 @@ src/ttsgrab/build_info.json
 .idea/
 .vscode/
 *.swp
+
+# Local synthesis output (e.g. `out/heart-sutra.mp3`); generated, not source.
+out/

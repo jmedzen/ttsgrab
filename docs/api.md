@@ -1,6 +1,6 @@
 # API reference
 
-Base URL `http://localhost:8000` by default. Interactive docs at `/docs`, ReDoc at
+Base URL `http://localhost:8300` by default. Interactive docs at `/docs`, ReDoc at
 `/redoc`, raw schema at `/openapi.json`.
 
 Everything below is also reachable through the OpenAI-compatible endpoint and MCP — they
@@ -19,10 +19,10 @@ Two kinds of caller:
 
 ```bash
 # admin
-curl -H "Authorization: Bearer $TTSGRAB_ADMIN_TOKEN" localhost:8000/v1/usage
+curl -H "Authorization: Bearer $TTSGRAB_ADMIN_TOKEN" localhost:8300/v1/usage
 
 # api key
-curl -H "Authorization: Bearer ttsg_abc123…" localhost:8000/v1/tts -d '…'
+curl -H "Authorization: Bearer ttsg_abc123…" localhost:8300/v1/tts -d '…'
 ```
 
 When **no** admin token is configured and the request comes from `127.0.0.1`/`::1`,
@@ -167,7 +167,7 @@ about the splitting is visible to the caller except the latency.
 Same body. Returns chunked audio as it is produced.
 
 ```bash
-curl -N -X POST localhost:8000/v1/tts/stream \
+curl -N -X POST localhost:8300/v1/tts/stream \
   -H 'Content-Type: application/json' \
   -d '{"text":"串流測試","voice":"zh-TW-HsiaoChenNeural","format":"mp3"}' \
   --output stream.mp3
@@ -194,7 +194,7 @@ last sentence has been synthesised.
 ## `GET /v1/voices`
 
 ```bash
-curl 'localhost:8000/v1/voices?language=zh-TW&free_only=true&q=hsiao&limit=10'
+curl 'localhost:8300/v1/voices?language=zh-TW&free_only=true&q=hsiao&limit=10'
 ```
 
 | Query | Meaning |
@@ -250,7 +250,7 @@ Re-fetches a provider's voice list. Useful after enabling a provider, or when a 
 catalogue is hiding a voice you know exists.
 
 ```bash
-curl -X POST localhost:8000/v1/providers/edge/refresh -H "Authorization: Bearer $TOKEN"
+curl -X POST localhost:8300/v1/providers/edge/refresh -H "Authorization: Bearer $TOKEN"
 ```
 
 ```json
@@ -395,7 +395,7 @@ Cost is exact, because it comes from the same pricing table the ledger uses.
 For text too long to sit on one HTTP connection, or when you want a webhook.
 
 ```bash
-curl -X POST localhost:8000/v1/jobs -H 'Content-Type: application/json' -d '{
+curl -X POST localhost:8300/v1/jobs -H 'Content-Type: application/json' -d '{
   "text": "很長的文章…",
   "voice": "zh-TW-HsiaoChenNeural",
   "webhook_url": "https://example.com/hooks/tts"
@@ -424,7 +424,7 @@ Accepts OpenAI's body and returns raw audio, so an unchanged SDK works with only
 changed.
 
 ```python
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="ttsg_…")
+client = OpenAI(base_url="http://localhost:8300/v1", api_key="ttsg_…")
 client.audio.speech.create(model="tts-1", voice="nova", input="Hello", response_format="mp3")
 ```
 
@@ -459,15 +459,15 @@ you got instead of lying.
 
 ```bash
 # register
-curl -X POST localhost:8000/v1/workers -H 'Authorization: Bearer '$TOKEN \
+curl -X POST localhost:8300/v1/workers -H 'Authorization: Bearer '$TOKEN \
   -H 'Content-Type: application/json' \
   -d '{"name":"gpu-box","base_url":"http://192.168.1.42:8880","kind":"tts"}'
 
 # check now, rather than waiting for the monitor
-curl -X POST localhost:8000/v1/workers/{worker_id}/check -H 'Authorization: Bearer '$TOKEN
+curl -X POST localhost:8300/v1/workers/{worker_id}/check -H 'Authorization: Bearer '$TOKEN
 
 # remove
-curl -X DELETE localhost:8000/v1/workers/{worker_id} -H 'Authorization: Bearer '$TOKEN
+curl -X DELETE localhost:8300/v1/workers/{worker_id} -H 'Authorization: Bearer '$TOKEN
 ```
 
 `base_url` is SSRF-checked: only `http`/`https`, link-local and cloud-metadata addresses
@@ -482,7 +482,7 @@ default and can be restricted with `security.allowed_worker_hosts`.
 ## References (voice cloning)
 
 ```bash
-curl -X POST localhost:8000/v1/references \
+curl -X POST localhost:8300/v1/references \
   -H 'Authorization: Bearer '$TOKEN \
   -F 'file=@my-voice.wav' \
   -F 'name=my-voice' \
@@ -503,7 +503,7 @@ stored under `data/reference/`. Use the `id` as `reference_audio_id` in `/v1/tts
 ## API keys and audit
 
 ```bash
-curl -X POST localhost:8000/v1/keys -H 'Authorization: Bearer '$TOKEN \
+curl -X POST localhost:8300/v1/keys -H 'Authorization: Bearer '$TOKEN \
   -H 'Content-Type: application/json' -d '{
     "name": "my-agent",
     "provider_allowlist": ["edge"],
@@ -529,7 +529,7 @@ Mounted at `/mcp` (streamable HTTP) when the `mcp` extra is installed.
 {
   "mcpServers": {
     "ttsgrab": {
-      "url": "http://localhost:8000/mcp/",
+      "url": "http://localhost:8300/mcp/",
       "headers": {"Authorization": "Bearer ttsg_…"}
     }
   }

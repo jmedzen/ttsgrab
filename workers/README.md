@@ -30,7 +30,7 @@ kokoro     python -m workers.kokoro           # :8880 — fast everywhere
 # then register it with the gateway
 # Worker registration is admin-only: a scoped API key is deliberately not enough, because
 # a key that could register workers could point the gateway at a host of its choosing.
-curl -X POST http://gateway:8000/v1/workers \
+curl -X POST http://gateway:8300/v1/workers \
   -H "Authorization: Bearer $TTSGRAB_SECURITY__ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"gpu-box","base_url":"http://192.168.1.42:8880","kind":"tts","model_hint":"cosyvoice2"}'

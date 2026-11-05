@@ -16,8 +16,8 @@ from ttsgrab.api.v1.jobs import _fire_webhook
     "url",
     [
         "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
-        "http://127.0.0.1:8000/v1/keys",
-        "http://localhost:8000/v1/keys",
+        "http://127.0.0.1:8300/v1/keys",
+        "http://localhost:8300/v1/keys",
         "file:///etc/passwd",
         "gopher://127.0.0.1:6379/_PING",
     ],

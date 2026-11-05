@@ -19,7 +19,7 @@ docker compose --profile core up -d
 ```
 
 `docker compose` with no profile starts `core` implicitly, so `docker compose up -d` works
-too. The gateway publishes on `127.0.0.1:8000` — deliberately, so a default install is not
+too. The gateway publishes on `127.0.0.1:8300` — deliberately, so a default install is not
 reachable from the LAN.
 
 Data lives in named volumes:
@@ -41,7 +41,7 @@ docker run --rm -v ttsgrab-data:/data -v "$PWD":/backup alpine \
 uv venv --python 3.11 .venv && source .venv/bin/activate
 uv pip install -e ".[mcp]"
 cd web && npm ci && npm run build && cd ..
-python -m ttsgrab --port 8000
+python -m ttsgrab --port 8300
 ```
 
 A launchd/systemd unit that supervises it:
@@ -56,7 +56,7 @@ After=network.target
 User=ttsgrab
 WorkingDirectory=/opt/ttsgrab
 EnvironmentFile=/opt/ttsgrab/.env
-ExecStart=/opt/ttsgrab/.venv/bin/python -m ttsgrab --port 8000
+ExecStart=/opt/ttsgrab/.venv/bin/python -m ttsgrab --port 8300
 Restart=always
 RestartSec=3
 
@@ -113,7 +113,7 @@ gateway does not auto-register — registration is explicit so nothing can quiet
 routing table.
 
 ```bash
-curl -X POST http://localhost:8000/v1/workers \
+curl -X POST http://localhost:8300/v1/workers \
   -H "Authorization: Bearer $TTSGRAB_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"kokoro","base_url":"http://kokoro:8880","kind":"tts","model_hint":"kokoro"}'
@@ -147,7 +147,7 @@ curl http://192.168.1.42:8880/health
 **On the gateway host:**
 
 ```bash
-curl -X POST http://localhost:8000/v1/workers \
+curl -X POST http://localhost:8300/v1/workers \
   -H "Authorization: Bearer $TTSGRAB_ADMIN_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"gpu-box","base_url":"http://192.168.1.42:8880","kind":"tts"}'
@@ -170,7 +170,8 @@ This is the part worth understanding, because it is the difference between "nice
 Verified behaviour, from the build log:
 
 ```
-$ curl -X POST localhost:8011/v1/tts -d '{"text":"…","voice":"zh-TW-HsiaoChenNeural","provider":"stub"}'
+# Recorded from the verification run, which used port 8011; the default is 8300.
+$ curl -X POST localhost:8300/v1/tts -d '{"text":"…","voice":"zh-TW-HsiaoChenNeural","provider":"stub"}'
 HTTP 200
 x-ttsgrab-provider: edge
 x-ttsgrab-fallback: stub->edge
@@ -195,7 +196,7 @@ Caddy is included:
 ```caddyfile
 tts.example.com {
     encode zstd gzip
-    reverse_proxy gateway:8000 {
+    reverse_proxy gateway:8300 {
         flush_interval -1      # required for /v1/tts/stream
     }
 }
@@ -212,7 +213,7 @@ For Traefik, or for a host Caddy in front of Docker:
 
 ```
 tts.example.com {
-    reverse_proxy 127.0.0.1:8000 {
+    reverse_proxy 127.0.0.1:8300 {
         flush_interval -1
     }
 }
@@ -392,7 +393,7 @@ make repeated agent calls cheap.
 ## Observability
 
 ```bash
-curl localhost:8000/metrics
+curl localhost:8300/metrics
 ```
 
 ```
@@ -412,7 +413,7 @@ A minimal scrape config:
 scrape_configs:
   - job_name: ttsgrab
     static_configs:
-      - targets: ["gateway:8000"]
+      - targets: ["gateway:8300"]
 ```
 
 Logs are structured JSON in production (`TTSGRAB_LOG_FORMAT=json`) with a `request_id` on

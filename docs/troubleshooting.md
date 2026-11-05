@@ -16,7 +16,7 @@ all_providers_failed: edge: NoAudioReceived
 **Confirm**
 
 ```bash
-curl -s -o /dev/null -w '%{http_code} %{size_download}\n' -X POST localhost:8000/v1/tts \
+curl -s -o /dev/null -w '%{http_code} %{size_download}\n' -X POST localhost:8300/v1/tts \
   -H 'Content-Type: application/json' \
   -d '{"text":"test","voice":"en-US-AriaNeural"}'
 ```
@@ -45,7 +45,7 @@ This is the price of a free unofficial provider. It is why the UI labels it `uno
 **Confirm**
 
 ```bash
-curl -s localhost:8000/v1/providers | python3 -m json.tool
+curl -s localhost:8300/v1/providers | python3 -m json.tool
 ```
 
 Look at `enabled`, `reason`, and `voices`.
@@ -69,7 +69,7 @@ Look at `enabled`, `reason`, and `voices`.
 Refresh without restarting:
 
 ```bash
-curl -X POST localhost:8000/v1/providers/google_cloud/refresh -H "Authorization: Bearer $TOKEN"
+curl -X POST localhost:8300/v1/providers/google_cloud/refresh -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
@@ -86,7 +86,7 @@ This is the feature working.
 **Check the real number**
 
 ```bash
-curl -s localhost:8000/v1/usage -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+curl -s localhost:8300/v1/usage -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
 **Why it refuses instead of degrading** — falling back to a free provider would silently
@@ -106,7 +106,7 @@ or set a budget in the Google Cloud console as well — two independent caps.
 **Confirm**
 
 ```bash
-curl -s 'localhost:8000/v1/usage/free-tier' -H "Authorization: Bearer $TOKEN"
+curl -s 'localhost:8300/v1/usage/free-tier' -H "Authorization: Bearer $TOKEN"
 ```
 
 This reports per-tier usage for the current UTC month, from our own ledger.
@@ -139,7 +139,7 @@ Cloud billing report when it matters.
 Confirm the gateway is streaming by hitting it directly, bypassing the proxy:
 
 ```bash
-curl -N -X POST http://127.0.0.1:8000/v1/tts/stream \
+curl -N -X POST http://127.0.0.1:8300/v1/tts/stream \
   -H 'Content-Type: application/json' \
   -d '{"text":"串流測試。這是第二句。這是第三句。","voice":"zh-TW-HsiaoChenNeural"}'
 ```
@@ -153,7 +153,7 @@ If chunks arrive progressively here but not through the proxy, it is the proxy.
 **Confirm**
 
 ```bash
-curl -s -D - -o /tmp/x.mp3 -X POST localhost:8000/v1/audio/speech \
+curl -s -D - -o /tmp/x.mp3 -X POST localhost:8300/v1/audio/speech \
   -H 'Content-Type: application/json' \
   -d '{"model":"tts-1","input":"hello","voice":"alloy","response_format":"mp3"}' | head -20
 ```
@@ -176,7 +176,7 @@ Check `content-type` and `content-length`.
 **Confirm**
 
 ```bash
-curl -s localhost:8000/v1/workers -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+curl -s localhost:8300/v1/workers -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
 Look at `healthy`, `last_error`, `latency_ms_ewma`.
@@ -196,7 +196,7 @@ Look at `healthy`, `last_error`, `latency_ms_ewma`.
 4. **Circuit breaker open.** It stays open for `router.circuit_breaker_cooldown_s` after failures,
    then half-opens with one probe request. Force a check:
    ```bash
-   curl -X POST localhost:8000/v1/workers/{id}/check -H "Authorization: Bearer $TOKEN"
+   curl -X POST localhost:8300/v1/workers/{id}/check -H "Authorization: Bearer $TOKEN"
    ```
 
 ---
@@ -259,7 +259,7 @@ longform:
 Confirm normalisation is happening:
 
 ```bash
-curl -s -X POST localhost:8000/v1/tts/estimate -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8300/v1/tts/estimate -H 'Content-Type: application/json' \
   -d '{"text":"這是繁體中文","voice":"zf_xiaobei"}' | python3 -m json.tool
 ```
 
@@ -308,7 +308,7 @@ cd web && rm -rf dist node_modules/.vite && npm run build && cd ..
 **Confirm the server is serving what you think:**
 
 ```bash
-curl -s localhost:8000/ | grep -o 'assets/[^"]*'
+curl -s localhost:8300/ | grep -o 'assets/[^"]*'
 ls src/ttsgrab/web/assets/
 ```
 
@@ -321,17 +321,17 @@ was interrupted — rebuild.
 
 ```bash
 # what the gateway thinks is true
-curl -s localhost:8000/readyz | python3 -m json.tool
-curl -s localhost:8000/v1/providers | python3 -m json.tool
+curl -s localhost:8300/readyz | python3 -m json.tool
+curl -s localhost:8300/v1/providers | python3 -m json.tool
 
 # structured logs, filtered to one request
 docker compose logs gateway | grep '<request-id-from-the-error-body>'
 
 # ask for the response headers, not just the body
-curl -sD - -o /dev/null -X POST localhost:8000/v1/tts -H 'Content-Type: application/json' -d '…'
+curl -sD - -o /dev/null -X POST localhost:8300/v1/tts -H 'Content-Type: application/json' -d '…'
 
 # reproduce without the UI or the proxy in the way
-./scripts/smoke.sh http://127.0.0.1:8000
+./scripts/smoke.sh http://127.0.0.1:8300
 ```
 
 Every error body carries a `request_id`. Quote it — it is the fastest path from a symptom to

@@ -19,7 +19,7 @@
     # `flush_interval -1` flushes after every write. Without it Caddy batches responses and
     # first-byte latency equals total latency for the client.
     @stream path /v1/tts/stream /v1/audio/speech /mcp /mcp/*
-    reverse_proxy @stream gateway:8000 {
+    reverse_proxy @stream gateway:8300 {
         flush_interval -1
         transport http {
             # Long synthesis must not be cut off mid-utterance.
@@ -29,7 +29,7 @@
     }
 
     # Everything else: normal buffered proxying.
-    reverse_proxy gateway:8000 {
+    reverse_proxy gateway:8300 {
         transport http {
             read_timeout 120s
             response_header_timeout 120s
@@ -63,5 +63,5 @@
 # Health endpoint reachable over plain HTTP from inside the compose network, for probes
 # that do not want to validate a certificate.
 :8080 {
-    reverse_proxy gateway:8000
+    reverse_proxy gateway:8300
 }

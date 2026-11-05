@@ -17,11 +17,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/v1': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/healthz': 'http://127.0.0.1:8000',
-      '/readyz': 'http://127.0.0.1:8000',
-      '/metrics': 'http://127.0.0.1:8000',
-      '/openapi.json': 'http://127.0.0.1:8000',
+      '/v1': { target: 'http://127.0.0.1:8300', changeOrigin: true },
+      '/healthz': 'http://127.0.0.1:8300',
+      '/readyz': 'http://127.0.0.1:8300',
+      '/metrics': 'http://127.0.0.1:8300',
+      '/openapi.json': 'http://127.0.0.1:8300',
     },
   },
 })
