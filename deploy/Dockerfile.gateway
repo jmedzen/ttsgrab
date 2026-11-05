@@ -13,7 +13,9 @@ COPY web/package.json web/package-lock.json* ./
 RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
 COPY web/ ./
-RUN npm run build
+# vite.config.ts writes to ../src/ttsgrab/web, i.e. /src/ttsgrab/web from /web. Copying from
+# /web/dist would fail: that path has never existed.
+RUN npm run build && test -f /src/ttsgrab/web/index.html
 
 # ---------- stage 2: python wheels ----------
 FROM python:3.11.10-slim-bookworm AS wheels
@@ -48,8 +50,8 @@ RUN groupadd --gid "${GID}" ttsgrab \
 COPY --from=wheels /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 
-# The built SPA replaces the placeholder the wheel shipped with.
-COPY --from=web /web/dist/ /usr/local/lib/python3.11/site-packages/ttsgrab/web/
+# The built SPA replaces whatever the wheel shipped with.
+COPY --from=web /src/ttsgrab/web/ /usr/local/lib/python3.11/site-packages/ttsgrab/web/
 
 RUN mkdir -p /data/cache /data/reference && chown -R ttsgrab:ttsgrab /data
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import importlib
 import json
 import os
 from typing import Any
@@ -29,20 +30,17 @@ import httpx
 def _load_sdk() -> tuple[type, str]:
     """Return the SDK's server class, tolerating the 1.x → 2.x rename.
 
-    A local import keeps the optional dependency optional, and probing the package rather
-    than importing both keeps mypy from seeing two definitions of the same name.
+    Resolved through ``importlib`` on purpose: the two SDK layouts export different names,
+    and a static import of either makes mypy disagree with itself depending on which version
+    is installed — an "unused type: ignore" here, a missing attribute there. A runtime probe
+    sidesteps both and keeps the optional dependency genuinely optional.
     """
     try:
-        import mcp.server as pkg
-
+        pkg = importlib.import_module("mcp.server")
         if hasattr(pkg, "mcpserver"):
-            from mcp.server.mcpserver import MCPServer
-
-            return MCPServer, "2.x"
-        from mcp.server.fastmcp import FastMCP  # type: ignore[attr-defined]
-
-        return FastMCP, "1.x"
-    except ImportError as exc:  # pragma: no cover
+            return importlib.import_module("mcp.server.mcpserver").MCPServer, "2.x"
+        return importlib.import_module("mcp.server.fastmcp").FastMCP, "1.x"
+    except ImportError as exc:  # pragma: no cover - environment problem, not logic
         raise SystemExit(
             'The MCP server needs the optional dependency: pip install "ttsgrab[mcp]"'
         ) from exc
