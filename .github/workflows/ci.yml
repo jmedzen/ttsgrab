@@ -1,0 +1,175 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep caches inside the workspace so a read-only or relocated HOME cannot break the run.
+  UV_CACHE_DIR: .uv-cache
+  npm_config_cache: .npm-cache
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv pip install --system -e ".[dev]"
+      - name: Ruff
+        run: ruff check src tests workers
+      - name: Format check
+        run: ruff format --check src tests workers
+      - name: Type check
+        run: mypy src/ttsgrab --ignore-missing-imports
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install
+        run: uv pip install --system -e ".[dev,mcp]"
+      - name: Test
+        # Network-dependent tests (live Edge TTS) are marked and excluded here: CI must not
+        # fail because Microsoft had a bad afternoon.
+        run: pytest -q -m "not network" --cov=ttsgrab --cov-report=term-missing --cov-fail-under=55
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        working-directory: web
+        run: npm ci
+      - name: Typecheck
+        working-directory: web
+        run: npx tsc --noEmit
+      - name: Build
+        working-directory: web
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: src/ttsgrab/web/
+          retention-days: 7
+
+  e2e:
+    runs-on: ubuntu-24.04
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install python deps
+        run: uv pip install --system -e ".[dev,mcp]"
+      - name: Build the SPA
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Install browsers
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Start the gateway
+        run: |
+          python -m ttsgrab --port 8011 > /tmp/ttsgrab.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8011/healthz && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8011/readyz
+      - name: Smoke
+        run: ./scripts/smoke.sh http://127.0.0.1:8011
+      - name: Browser tests
+        working-directory: web
+        env:
+          TTSGRAB_E2E_BASE_URL: http://127.0.0.1:8011
+          CI: "true"
+        run: npx playwright test
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: web/test-results/
+          retention-days: 7
+      - name: Server log on failure
+        if: failure()
+        run: tail -100 /tmp/ttsgrab.log
+
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build gateway (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.gateway
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ttsgrab/gateway:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Gateway starts and reports ready
+        run: |
+          docker run -d --name gw -p 8000:8000 \
+            -e TTSGRAB_ALLOW_LOCALHOST=true ttsgrab/gateway:ci
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8000/healthz && break || sleep 2
+          done
+          curl -sf http://127.0.0.1:8000/readyz
+          ./scripts/smoke.sh http://127.0.0.1:8000 || true   # edge may be flaky in CI
+          docker logs gw | tail -50
+          docker rm -f gw
+      - name: Build the CPU worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.worker
+          platforms: linux/amd64
+          push: false
+          build-args: |
+            BASE_IMAGE=python:3.11.10-slim-bookworm
+            WORKER=kokoro
+          tags: ttsgrab/worker-kokoro-cpu:ci
+          cache-from: type=gha
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # gitleaks needs history, not just the tip
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

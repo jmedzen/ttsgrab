@@ -1,0 +1,181 @@
+# ttsgrab — Docker Compose
+#
+# Profiles, and what each one gives you:
+#   core       gateway only. Edge TTS + any cloud providers you configured. No GPU.
+#   gpu        gateway + Kokoro + CosyVoice2 on the NVIDIA runtime.
+#   cpu-local  gateway + Kokoro on CPU (works on any laptop, slower but free).
+#
+# `docker compose up` with no profile starts `core` implicitly, so the 5-minute quickstart
+# stays a one-liner.
+#
+# Secrets: never put keys in this file. Use `.env` (gitignored) or Docker secrets — see
+# the `secrets:` block at the bottom for the Google service-account JSON.
+
+name: ttsgrab
+
+x-common-env: &common-env
+  TTSGRAB_ENV: production
+  TTSGRAB_LOG_FORMAT: json
+  TTSGRAB_DATA_DIR: /data
+
+services:
+  gateway:
+    profiles: ["core", "gpu", "cpu-local"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.gateway
+    image: ttsgrab/gateway:0.1.0
+    restart: unless-stopped
+    ports:
+      # Bind to localhost by default; put Caddy/Traefik in front for public access.
+      - "${TTSGRAB_BIND:-127.0.0.1}:${TTSGRAB_PORT:-8000}:8000"
+    environment:
+      <<: *common-env
+      TTSGRAB_SECURITY__ADMIN_TOKEN: ${TTSGRAB_ADMIN_TOKEN:-}
+      TTSGRAB_SECURITY__ALLOW_LOCALHOST_WITHOUT_TOKEN: ${TTSGRAB_ALLOW_LOCALHOST:-true}
+      TTSGRAB_EDGE__ENABLED: ${TTSGRAB_EDGE_ENABLED:-true}
+      # Cloud providers stay disabled until a key is present; a missing key is not an error.
+      TTSGRAB_GOOGLE_CLOUD__ENABLED: ${TTSGRAB_GOOGLE_ENABLED:-false}
+      TTSGRAB_GOOGLE_CLOUD__API_KEY: ${GOOGLE_API_KEY:-}
+      TTSGRAB_GOOGLE_CLOUD__CREDENTIALS_FILE: ${GOOGLE_CREDENTIALS_FILE:-}
+      TTSGRAB_GEMINI__ENABLED: ${TTSGRAB_GEMINI_ENABLED:-false}
+      TTSGRAB_GEMINI__API_KEYS: ${GEMINI_API_KEYS:-}
+      TTSGRAB_AZURE__ENABLED: ${TTSGRAB_AZURE_ENABLED:-false}
+      TTSGRAB_AZURE__API_KEY: ${AZURE_SPEECH_KEY:-}
+      TTSGRAB_AZURE__REGION: ${AZURE_SPEECH_REGION:-}
+      TTSGRAB_USAGE__MONTHLY_BUDGET_USD: ${TTSGRAB_MONTHLY_BUDGET_USD:-0}
+      TTSGRAB_CACHE__MAX_BYTES: ${TTSGRAB_CACHE_MAX_BYTES:-2147483648}
+      TTSGRAB_CACHE__TTL_SECONDS: ${TTSGRAB_CACHE_TTL_SECONDS:-2592000}
+    volumes:
+      - ttsgrab-data:/data
+      - ttsgrab-cache:/data/cache
+      - ttsgrab-reference:/data/reference
+    secrets:
+      - source: google_credentials
+        target: google-credentials.json
+        mode: 0400
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # -- GPU workers ---------------------------------------------------------------------
+  kokoro:
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.worker
+      args:
+        WORKER: kokoro
+    image: ttsgrab/worker-kokoro:0.1.0
+    restart: unless-stopped
+    environment:
+      WORKER_PORT: 8880
+      WORKER_CONCURRENCY: 2
+      KOKORO_REPO: hexgrad/Kokoro-82M
+    volumes:
+      - kokoro-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+
+  cosyvoice:
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.worker
+      args:
+        WORKER: cosyvoice
+    image: ttsgrab/worker-cosyvoice:0.1.0
+    restart: unless-stopped
+    environment:
+      WORKER_PORT: 8880
+      WORKER_CONCURRENCY: 1
+      COSYVOICE_MODEL_DIR: /models/CosyVoice2-0.5B
+    volumes:
+      - cosyvoice-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+
+  # -- CPU-only local worker -----------------------------------------------------------
+  kokoro-cpu:
+    profiles: ["cpu-local"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.worker
+      args:
+        WORKER: kokoro
+        BASE_IMAGE: python:3.11.10-slim-bookworm
+    image: ttsgrab/worker-kokoro-cpu:0.1.0
+    restart: unless-stopped
+    environment:
+      WORKER_PORT: 8880
+      WORKER_CONCURRENCY: 1
+      TTSGRAB_DEVICE: cpu
+    volumes:
+      - kokoro-models:/models
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # Optional HTTPS front door. `docker compose --profile core --profile tls up`.
+  caddy:
+    profiles: ["tls"]
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      TTSGRAB_DOMAIN: ${TTSGRAB_DOMAIN:-localhost}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+volumes:
+  ttsgrab-data:
+  ttsgrab-cache:
+  ttsgrab-reference:
+  kokoro-models:
+  cosyvoice-models:
+  caddy-data:
+  caddy-config:
+
+secrets:
+  google_credentials:
+    # Provide the file, or remove this service's `secrets:` entry when using an API key
+    # instead of a service account. `file:` never gets committed.
+    file: ${GOOGLE_CREDENTIALS_FILE:-./secrets/google-credentials.json}

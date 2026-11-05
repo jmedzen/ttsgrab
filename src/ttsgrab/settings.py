@@ -1,0 +1,311 @@
+"""Configuration: env vars + ``config.yaml``.
+
+Precedence (highest first): environment variable / ``.env`` → ``config.yaml`` → defaults.
+
+Validation philosophy: a provider that is missing credentials is *disabled*, not fatal.
+The service must always boot with zero secrets configured.
+"""
+
+from __future__ import annotations
+
+import os
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Literal
+
+import yaml
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class SecuritySettings(BaseModel):
+    # Bearer tokens accepted by /v1. Empty list == auth disabled (dev only).
+    api_keys: list[str] = Field(default_factory=list)
+    # Token the web UI uses. Distinct from API keys so UI access can be audited.
+    admin_token: str | None = None
+    # When true, the UI can be opened without a token from localhost only.
+    allow_localhost_without_token: bool = True
+    rate_limit_per_minute: int = 120
+    max_text_chars: int = 20000
+    max_request_body_bytes: int = 2 * 1024 * 1024
+    allowed_upload_mimes: list[str] = Field(
+        default_factory=lambda: [
+            "audio/wav",
+            "audio/x-wav",
+            "audio/mpeg",
+            "audio/flac",
+            "audio/ogg",
+            "audio/webm",
+            "audio/mp4",
+        ]
+    )
+    max_upload_bytes: int = 25 * 1024 * 1024
+    # SSRF guard for worker base_url registration.
+    allow_private_worker_urls: bool = True  # LAN workers are the whole point
+    allowed_worker_hosts: list[str] = Field(default_factory=list)
+
+
+class GoogleCloudSettings(BaseModel):
+    enabled: bool = False
+    # Path to a service-account JSON file. Never inline the JSON itself.
+    credentials_file: str | None = None
+    # Alternative: a plain API key (works for the REST API on some endpoints).
+    api_key: str | None = None
+    project_id: str | None = None
+    location: str = "global"
+    # Monthly character budget across ALL Google voice types. 0 == unlimited.
+    monthly_budget_chars: int = 1_000_000
+    # Hard USD cap in micro-USD. 0 == unlimited.
+    monthly_budget_micro_usd: int = 0
+    # Never exceed the documented free allowance automatically.
+    respect_free_tier: bool = True
+
+
+class GeminiTTSSettings(BaseModel):
+    """Gemini TTS goes through the Gemini API, not Cloud TTS — separate credentials."""
+
+    enabled: bool = False
+    model: str = "gemini-3.8-flash-tts"
+    base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    # Key pool. First N come from env; the rest can be added at runtime via the UI.
+    api_keys: list[str] = Field(default_factory=list)
+    # free tier is rate-limited, paid keys are not. Kept per key.
+    strategy: Literal["round_robin", "least_recently_used", "failover"] = "least_recently_used"
+    monthly_budget_chars: int = 0
+    monthly_budget_micro_usd: int = 0
+
+
+class AzureSettings(BaseModel):
+    enabled: bool = False
+    region: str | None = None
+    api_key: str | None = None
+    tier: Literal["F0", "S0"] = "F0"
+    monthly_budget_chars: int = 500_000
+
+
+class EdgeSettings(BaseModel):
+    """Unofficial Microsoft Edge read-aloud endpoint.
+
+    Default-on per project decision, but it is the *only* unofficial provider that is.
+    It is fragile (Microsoft rotates DRM tokens) and has no commercial-redistribution
+    grant. See docs/providers.md.
+    """
+
+    enabled: bool = True
+    allow_public: bool = True
+    proxy: str | None = None
+
+
+class FreeWebSettings(BaseModel):
+    """gTTS / translate_tts / StreamElements. All unofficial, all off by default."""
+
+    enabled: bool = False
+    gtts_enabled: bool = False
+    gtts_tld: str = "com"
+    translate_tts_enabled: bool = False
+    streamelements_enabled: bool = False
+
+
+class McpSettings(BaseModel):
+    """MCP server exposure. Requires the optional ``mcp`` extra."""
+
+    enabled: bool = True
+    path: str = "/mcp"
+
+
+class CacheSettings(BaseModel):
+    enabled: bool = True
+    dir: str = "./data/cache"
+    max_bytes: int = 2 * 1024 * 1024 * 1024  # 2 GiB
+    ttl_seconds: int = 30 * 24 * 3600
+
+
+class RouterSettings(BaseModel):
+    default_policy: Literal[
+        "cheapest", "fastest", "best_quality", "local_only", "free_only", "explicit"
+    ] = "cheapest"
+    # Ordered fallback applied after the primary choice.
+    fallback_chain: list[str] = Field(
+        default_factory=lambda: ["edge", "kokoro", "gpt_sovits", "google_cloud", "gemini"]
+    )
+    max_fallbacks: int = 2
+    circuit_breaker_threshold: int = 5
+    circuit_breaker_cooldown_s: int = 60
+    request_timeout_s: float = 60.0
+    # quality rank per provider/voice-tier, used by best_quality
+    quality_scores: dict[str, float] = Field(default_factory=dict)
+
+
+class WorkerRegistrySettings(BaseModel):
+    health_interval_s: int = 30
+    health_timeout_s: int = 5
+    # A worker that fails N consecutive health checks is evicted from routing.
+    unhealthy_threshold: int = 3
+    recovery_threshold: int = 2
+    default_timeout_s: float = 120.0
+
+
+class LongFormSettings(BaseModel):
+    enabled: bool = True
+    # Split above this many characters into sentences.
+    chunk_threshold: int = 400
+    max_sentence_chars: int = 300
+    max_concurrency: int = 4
+    pause_ms_between_sentences: int = 120
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="TTSGRAB_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    app_name: str = "ttsgrab"
+    env: Literal["dev", "prod", "test"] = "dev"
+    host: str = "127.0.0.1"
+    port: int = 8000
+    log_level: str = "INFO"
+    log_format: Literal["json", "console"] = "console"
+
+    database_url: str = "sqlite+aiosqlite:///./data/ttsgrab.db"
+    data_dir: str = "./data"
+
+    public_base_url: str = "http://127.0.0.1:8000"
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    edge: EdgeSettings = Field(default_factory=EdgeSettings)
+    free_web: FreeWebSettings = Field(default_factory=FreeWebSettings)
+    google_cloud: GoogleCloudSettings = Field(default_factory=GoogleCloudSettings)
+    gemini: GeminiTTSSettings = Field(default_factory=GeminiTTSSettings)
+    azure: AzureSettings = Field(default_factory=AzureSettings)
+    cache: CacheSettings = Field(default_factory=CacheSettings)
+    mcp: McpSettings = Field(default_factory=McpSettings)
+    router: RouterSettings = Field(default_factory=RouterSettings)
+    workers: WorkerRegistrySettings = Field(default_factory=WorkerRegistrySettings)
+    longform: LongFormSettings = Field(default_factory=LongFormSettings)
+
+    @field_validator("database_url")
+    @classmethod
+    def _sqlite_needs_async_driver(cls, v: str) -> str:
+        if v.startswith("sqlite://") and not v.startswith("sqlite+aiosqlite://"):
+            return v.replace("sqlite://", "sqlite+aiosqlite://", 1)
+        return v
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.database_url.startswith("sqlite")
+
+    @property
+    def data_path(self) -> Path:
+        return Path(self.data_dir)
+
+    def ensure_dirs(self) -> None:
+        for p in (
+            self.data_path,
+            Path(self.cache.dir),
+            self.data_path / "audio",
+            self.data_path / "reference",
+        ):
+            p.mkdir(parents=True, exist_ok=True)
+
+
+# --------------------------------------------------------------------------------------
+# config.yaml merge
+# --------------------------------------------------------------------------------------
+
+# Env var names for secrets that may also come from the environment directly (Docker
+# secrets mount as files, which we read here too).
+_ENV_SECRETS = {
+    "GOOGLE_APPLICATION_CREDENTIALS": ("google_cloud", "credentials_file"),
+    "GOOGLE_CLOUD_TTS_API_KEY": ("google_cloud", "api_key"),
+    "GEMINI_API_KEY": ("gemini", "api_keys"),
+    "AZURE_SPEECH_KEY": ("azure", "api_key"),
+    "TTSGRAB_ADMIN_TOKEN": ("security", "admin_token"),
+}
+
+_SECRET_FILE_VARS = {
+    # Docker secret style: VAR_FILE points at a file whose content is the secret.
+    "GOOGLE_APPLICATION_CREDENTIALS_FILE": ("google_cloud", "credentials_file"),
+    "GEMINI_API_KEY_FILE": ("gemini", "api_keys"),
+    "AZURE_SPEECH_KEY_FILE": ("azure", "api_key"),
+}
+
+
+def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def _read_secret_file(path: str) -> str:
+    return Path(path).read_text(encoding="utf-8").strip()
+
+
+def _ensure_async_driver(url: str) -> str:
+    """Force an async driver onto a plain SQLAlchemy URL.
+
+    People write ``postgresql://`` because that is what every tutorial uses; SQLAlchemy
+    would then load a synchronous driver and the async engine would refuse it.
+    """
+    if url.startswith("sqlite://") and "+aiosqlite" not in url:
+        return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+
+def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings:
+    """Build settings from defaults → config.yaml → env/`.env`."""
+    raw: dict[str, Any] = {}
+
+    path = Path(config_path or os.environ.get("TTSGRAB_CONFIG") or "config.yaml")
+    if path.is_file():
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(f"{path} must contain a YAML mapping")
+        raw = loaded
+
+    # Docker-secret style indirection before handing to pydantic-settings.
+    for env_var, (section, field) in _SECRET_FILE_VARS.items():
+        secret_path = os.environ.get(env_var)
+        if not secret_path:
+            continue
+        value = _read_secret_file(secret_path)
+        sect = raw.setdefault(section, {})
+        if field == "api_keys":
+            existing = sect.get("api_keys") or []
+            sect["api_keys"] = [*existing, *[k.strip() for k in value.splitlines() if k.strip()]]
+        else:
+            sect[field] = value
+
+    settings = Settings(**raw)
+
+    # Plain env vars that pydantic-settings does not reach (nested, differently named).
+    for env_var, (section, field) in _ENV_SECRETS.items():
+        secret = os.environ.get(env_var)
+        if not secret:
+            continue
+        target: Any = getattr(settings, section)
+        if field == "api_keys":
+            if secret not in target.api_keys:
+                target.api_keys = [*target.api_keys, secret]
+        else:
+            setattr(target, field, secret)
+
+    if os.environ.get("DATABASE_URL"):
+        settings.database_url = _ensure_async_driver(os.environ["DATABASE_URL"])
+    settings.database_url = settings.database_url or "sqlite+aiosqlite:///./data/ttsgrab.db"
+
+    settings.ensure_dirs()
+    return settings
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return load_settings()

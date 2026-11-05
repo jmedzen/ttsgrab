@@ -1,0 +1,67 @@
+# Reverse proxy for the `tls` compose profile.
+#
+# Purpose: terminate HTTPS and — critically — stop the proxy from buffering streaming audio.
+# With default buffering, `/v1/tts/stream` arrives as one blob at the end, which defeats the
+# entire point of a streaming endpoint.
+
+{
+    # Set ACME_EMAIL in .env for Let's Encrypt expiry notices; empty is tolerated.
+    email {$ACME_EMAIL}
+    # Rename this if you point a custom Caddy image at it.
+    admin off
+}
+
+# Caddy issues and renews certificates automatically for any name that resolves here.
+{$TTSGRAB_DOMAIN:localhost} {
+    encode zstd gzip
+
+    # --- streaming ------------------------------------------------------------------
+    # `flush_interval -1` flushes after every write. Without it Caddy batches responses and
+    # first-byte latency equals total latency for the client.
+    @stream path /v1/tts/stream /v1/audio/speech /mcp /mcp/*
+    reverse_proxy @stream gateway:8000 {
+        flush_interval -1
+        transport http {
+            # Long synthesis must not be cut off mid-utterance.
+            read_timeout 300s
+            write_timeout 300s
+        }
+    }
+
+    # Everything else: normal buffered proxying.
+    reverse_proxy gateway:8000 {
+        transport http {
+            read_timeout 120s
+            response_header_timeout 120s
+        }
+    }
+
+    # --- security headers -----------------------------------------------------------
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # The SPA is self-contained; no third-party origins are used.
+        Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:"
+        -Server
+    }
+
+    # Request bodies are capped at 20 000 characters of text; this bounds the rest.
+    request_body {
+        max_size 8MB
+    }
+
+    log {
+        output stderr
+        format console
+        # Do not log query strings: a caller may put a token there while experimenting.
+        level INFO
+    }
+}
+
+# Health endpoint reachable over plain HTTP from inside the compose network, for probes
+# that do not want to validate a certificate.
+:8080 {
+    reverse_proxy gateway:8000
+}

@@ -1,0 +1,72 @@
+"""Alembic environment.
+
+The application uses an async engine, so migrations run through ``run_sync``. The URL comes
+from the same settings loader the app uses, which means migrations and the app can never
+disagree about which database they are talking to.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from logging.config import fileConfig
+
+from alembic import context
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from ttsgrab.db.models import Base
+from ttsgrab.settings import load_settings
+
+config = context.config
+
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+target_metadata = Base.metadata
+
+
+def _url() -> str:
+    settings = load_settings()
+    url = settings.database_url
+    # Alembic's async template needs an async driver, which the settings already guarantee.
+    return url or "sqlite+aiosqlite:///./data/ttsgrab.db"
+
+
+def run_migrations_offline() -> None:
+    context.configure(
+        url=_url(),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def do_run_migrations(connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        # SQLite cannot ALTER most things; batch mode rewrites the table instead.
+        render_as_batch=True,
+        compare_type=True,
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    engine = create_async_engine(_url(), poolclass=None)
+    async with engine.connect() as connection:
+        await connection.run_sync(do_run_migrations)
+    await engine.dispose()
+
+
+def run_migrations_online() -> None:
+    asyncio.run(run_async_migrations())
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

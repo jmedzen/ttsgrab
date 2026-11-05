@@ -1,0 +1,81 @@
+[project]
+name = "ttsgrab"
+version = "0.1.0"
+description = "Unified TTS gateway: one API, many providers, with a web UI for humans and an MCP server for agents."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32,<1.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "sqlalchemy[asyncio]>=2.0.36,<3.0",
+    "aiosqlite>=0.20,<1.0",
+    "alembic>=1.14,<2.0",
+    "httpx>=0.28,<1.0",
+    "structlog>=24.4,<26.0",
+    "prometheus-client>=0.21,<1.0",
+    "pyyaml>=6.0,<7.0",
+    "edge-tts>=7.3.1,<8.0",
+    "python-multipart>=0.0.20,<1.0",
+    "opencc-python-reimplemented>=0.1.7,<1.0",
+    "jinja2>=3.1,<4.0",
+]
+
+[project.optional-dependencies]
+postgres = ["asyncpg>=0.30,<1.0"]
+mcp = ["mcp>=1.2,<2.0"]
+gcp = ["google-auth>=2.36,<3.0"]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "pytest-cov>=6.0,<7.0",
+    "respx>=0.22,<1.0",
+    "ruff>=0.8,<1.0",
+    "mypy>=1.13,<2.0",
+    "types-pyyaml>=6.0",
+]
+
+[project.scripts]
+ttsgrab = "ttsgrab.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ttsgrab"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"pricing.yaml" = "ttsgrab/pricing.yaml"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
+ignore = ["E501", "B008", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "B011"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/ttsgrab"]
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+plugins = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "network: hits a real upstream service; excluded from CI",
+]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

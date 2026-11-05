@@ -1,0 +1,65 @@
+# Multi-stage build for the gateway.
+#
+# Build target is linux/amd64 by default (see Makefile); arm64 works too because every
+# dependency ships an aarch64 wheel. `ffmpeg` is installed at runtime, not build time, so
+# the toolchain layer stays out of the final image.
+
+# ---------- stage 1: build the SPA ----------
+FROM node:22.11.0-bookworm-slim AS web
+WORKDIR /web
+
+# Only package files first, so the dependency layer is cached across source edits.
+COPY web/package.json web/package-lock.json* ./
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+COPY web/ ./
+RUN npm run build
+
+# ---------- stage 2: python wheels ----------
+FROM python:3.11.10-slim-bookworm AS wheels
+WORKDIR /build
+RUN pip install --no-cache-dir --upgrade pip build
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+# Build a wheel so the runtime stage needs no compiler.
+RUN python -m build --wheel --outdir /dist
+
+# ---------- stage 3: runtime ----------
+FROM python:3.11.10-slim-bookworm AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TTSGRAB_DATA_DIR=/data \
+    TTSGRAB_HOST=0.0.0.0 \
+    TTSGRAB_PORT=8000
+
+# ffmpeg: transcoding and concatenation. curl: container healthcheck.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Non-root by default. UID/GID are build args so a NAS deployment can match its own user.
+ARG UID=10001
+ARG GID=10001
+RUN groupadd --gid "${GID}" ttsgrab \
+ && useradd --uid "${UID}" --gid "${GID}" --create-home --shell /usr/sbin/nologin ttsgrab
+
+COPY --from=wheels /dist/*.whl /tmp/
+RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+
+# The built SPA replaces the placeholder the wheel shipped with.
+COPY --from=web /web/dist/ /usr/local/lib/python3.11/site-packages/ttsgrab/web/
+
+RUN mkdir -p /data/cache /data/reference && chown -R ttsgrab:ttsgrab /data
+
+USER ttsgrab
+WORKDIR /home/ttsgrab
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8000/healthz || exit 1
+
+ENTRYPOINT ["python", "-m", "ttsgrab"]
+CMD ["--host", "0.0.0.0", "--port", "8000"]

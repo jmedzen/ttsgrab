@@ -1,0 +1,75 @@
+# Generic model-worker image.
+#
+# One Dockerfile for all three workers; the model is selected at build time with
+# `--build-arg WORKER=kokoro|cosyvoice|gpt_sovits`. That keeps the shared layers (torch,
+# ffmpeg, base runtime) cached across all three images instead of duplicating them.
+#
+# GPU: this image is CUDA-enabled by default. For a CPU-only host, override
+# BASE_IMAGE=python:3.11.10-slim-bookworm and TORCH_INDEX=... cpu wheels.
+
+ARG BASE_IMAGE=nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG WORKER=kokoro
+ARG TORCH_VERSION=2.5.1
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    WORKER_PORT=8880 \
+    WORKER_HOST=0.0.0.0 \
+    HF_HOME=/models/hf \
+    TORCH_HOME=/models/torch
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      python3.11 python3.11-venv python3-pip ffmpeg curl ca-certificates git \
+ && rm -rf /var/lib/apt/lists/* \
+ && ln -sf /usr/bin/python3.11 /usr/local/bin/python
+
+RUN pip install --upgrade pip setuptools wheel
+
+# torch first: it is the largest layer and changes least often.
+RUN pip install "torch==${TORCH_VERSION}" torchaudio \
+      --index-url https://download.pytorch.org/whl/cu124 || \
+    pip install "torch==${TORCH_VERSION}" torchaudio
+
+COPY workers/_base /app/workers/_base
+COPY workers/${WORKER} /app/workers/${WORKER}
+
+WORKDIR /app
+
+# Per-worker dependencies. Kept in a shell case rather than three Dockerfiles because the
+# only thing that differs is this line.
+RUN case "${WORKER}" in \
+      kokoro) \
+        pip install "kokoro>=0.9.2" soundfile numpy ;; \
+      cosyvoice) \
+        pip install numpy soundfile conformer hyperpyyaml \
+                    "onnxruntime-gpu" "modelscope" "WeTextProcessing" \
+                    "openai-whisper" "matcha-tts" ;; \
+      gpt_sovits) \
+        pip install numpy soundfile httpx ;; \
+      *) echo "unknown WORKER=${WORKER}" && exit 1 ;; \
+    esac
+
+# Models are downloaded on first boot into a volume, so the image stays small and a model
+# update does not require a rebuild. The gateway's health check will show "loaded: false"
+# with the download in progress rather than failing silently.
+RUN mkdir -p /models && chmod 777 /models
+
+# Ubuntu 22.04 has no `useradd --no-log-init` need here; a plain system user is fine.
+RUN groupadd --gid 10001 worker \
+ && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin worker \
+ && chown -R worker:worker /app /models
+
+USER worker
+
+EXPOSE 8880
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:8880/health || exit 1
+
+# start-period is generous on purpose: the first boot downloads weights.
+CMD ["sh", "-c", "python -m workers.${WORKER}"]

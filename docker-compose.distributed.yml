@@ -1,0 +1,69 @@
+# Distributed deployment: gateway on one machine, GPU workers on another.
+#
+# Scenario this file is for: the gateway runs on a small always-on box (NAS, VPS, Mac mini)
+# and the GPU lives in another room. Copy this file to the **worker** machine and run it
+# there; the gateway just needs the worker's URL.
+#
+#   # on the GPU box
+#   docker compose -f docker-compose.distributed.yml up -d
+#
+#   # on the gateway, either in the UI (Providers → Add worker) or:
+#   curl -X POST http://gateway:8000/v1/workers \
+#     -H 'Content-Type: application/json' \
+#     -d '{"name":"gpu-box","base_url":"http://192.168.1.42:8880","kind":"tts"}'
+#
+# Why registration and not config: the gateway health-checks each worker, measures its
+# latency, and evicts it from routing when it stops answering — so pulling the plug on the
+# GPU box degrades to cloud/Edge instead of failing requests.
+
+name: ttsgrab-workers
+
+x-gpu-reservation: &gpu-reservation
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+
+services:
+  kokoro:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.worker
+      args:
+        WORKER: kokoro
+    image: ttsgrab/worker-kokoro:0.1.0
+    restart: unless-stopped
+    environment:
+      WORKER_PORT: 8880
+      WORKER_CONCURRENCY: 2
+      WORKER_AUTH_TOKEN: ${WORKER_AUTH_TOKEN:-}
+    volumes:
+      - kokoro-models:/models
+    # Bind to all interfaces: the gateway is on another host. Firewall this port to the
+    # gateway's IP — it is an unauthenticated LAN service by design.
+    ports:
+      - "${WORKER_BIND:-0.0.0.0}:8880:8880"
+    deploy: *gpu-reservation
+
+  cosyvoice:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.worker
+      args:
+        WORKER: cosyvoice
+    image: ttsgrab/worker-cosyvoice:0.1.0
+    restart: unless-stopped
+    environment:
+      WORKER_PORT: 8880
+      COSYVOICE_MODEL_DIR: /models/CosyVoice2-0.5B
+    volumes:
+      - cosyvoice-models:/models
+    ports:
+      - "${WORKER_BIND:-0.0.0.0}:8882:8880"
+    deploy: *gpu-reservation
+
+volumes:
+  kokoro-models:
+  cosyvoice-models:

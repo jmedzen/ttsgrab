@@ -1,0 +1,53 @@
+# --- secrets: the ones that must never be committed ------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+!package-lock.json
+secrets/
+config.yaml
+
+# --- application state ----------------------------------------------------------------
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+cache/
+
+# --- python ---------------------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.uv-cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- node / frontend ------------------------------------------------------------------
+node_modules/
+.npm-cache/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/.vite/
+
+# --- generated SPA bundle -------------------------------------------------------------
+# Built by `make web` / the wheel build. Committing build output invites drift between
+# what the repo shows and what the Dockerfile produces.
+src/ttsgrab/web/
+
+# --- editors / OS ---------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp

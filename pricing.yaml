@@ -1,0 +1,75 @@
+# TTS pricing. Edit this file to match the rates you actually pay.
+#
+# The gateway starts from the built-in table and overlays whatever you put here:
+# per-tier entries are merged, so a partial file is safe — you only state what differs.
+#
+#   version    bumped on every edit; recorded with each usage event so historical costs stay
+#              explainable after a price change
+#   effective  the date these numbers took effect (ISO). Informational, shown in the UI.
+#
+# usd_per_mchar          US dollars per one million characters.
+# free_chars_per_month   Characters included free each calendar month. 0 = no free tier.
+#
+# Get this wrong and the gateway bills you wrong: it refuses to guess. Override it.
+
+version: 3
+effective: '2026-11-01'
+currency: USD
+note: Verified 2026-11. Google and Azure change prices without notice; re-check before relying on the
+  budget cap as a hard financial control.
+tiers:
+  google_cloud:
+    Standard:
+      usd_per_mchar: 4.0
+      free_chars_per_month: 4000000
+    Wavenet:
+      usd_per_mchar: 4.0
+      free_chars_per_month: 4000000
+    Neural2:
+      usd_per_mchar: 16.0
+      free_chars_per_month: 1000000
+    Polyglot:
+      usd_per_mchar: 16.0
+      free_chars_per_month: 1000000
+    Studio:
+      usd_per_mchar: 160.0
+      free_chars_per_month: 1000000
+    Chirp3-HD:
+      usd_per_mchar: 30.0
+      free_chars_per_month: 1000000
+      notes: Chirp 3 HD
+  gemini:
+    gemini-tts:
+      usd_per_mchar: 12.0
+      free_chars_per_month: 0
+      notes: Gemini 3.8 Flash TTS. No free allowance. Token-priced upstream; this is a character-equivalent
+        estimate.
+  azure:
+    neural:
+      usd_per_mchar: 16.0
+      free_chars_per_month: 500000
+      notes: F0 free tier hard-stops at 500k chars/month.
+  edge:
+    neural:
+      usd_per_mchar: 0.0
+      free_chars_per_month: 0
+  gtts:
+    translate:
+      usd_per_mchar: 0.0
+      free_chars_per_month: 0
+  translate_tts:
+    translate:
+      usd_per_mchar: 0.0
+      free_chars_per_month: 0
+  kokoro:
+    local:
+      usd_per_mchar: 0.0
+      free_chars_per_month: 0
+  gpt_sovits:
+    local:
+      usd_per_mchar: 0.0
+      free_chars_per_month: 0
+  cosyvoice:
+    local:
+      usd_per_mchar: 0.0
+      free_chars_per_month: 0
