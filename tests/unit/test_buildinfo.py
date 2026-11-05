@@ -90,3 +90,43 @@ async def test_capabilities_reports_build(client) -> None:
     r = await client.get("/v1/capabilities")
     assert r.status_code == 200
     assert "version" in r.json()
+
+
+def test_wheel_builds_when_build_info_is_absent(tmp_path) -> None:
+    """CI checks out a fresh tree with no build_info.json, and must still be able to build.
+
+    This is not hypothetical: declaring the file as a hatch force-include broke the lint,
+    test and docker jobs at once, because force-include *fails* on a missing file. It has
+    to be an artifact glob, which tolerates absence.
+    """
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    build_file = root / "src" / "ttsgrab" / "build_info.json"
+    stash = tmp_path / "build_info.json"
+    had_file = build_file.exists()
+    if had_file:
+        shutil.copy2(build_file, stash)
+
+    try:
+        build_file.unlink(missing_ok=True)
+        out = tmp_path / "dist"
+        result = subprocess.run(
+            [sys.executable, "-m", "hatchling", "build", "-t", "wheel", "-d", str(out)],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+        assert result.returncode == 0, (
+            "the wheel must build without build_info.json — CI has no such file:\n"
+            f"{result.stdout[-2000:]}\n{result.stderr[-2000:]}"
+        )
+        assert list(out.glob("*.whl")), "no wheel was produced"
+    finally:
+        if had_file:
+            shutil.copy2(stash, build_file)
