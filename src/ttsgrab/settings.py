@@ -15,7 +15,11 @@ from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 class SecuritySettings(BaseModel):
@@ -156,7 +160,13 @@ class LongFormSettings(BaseModel):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="TTSGRAB_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_prefix="TTSGRAB_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        # Without this, TTSGRAB_GOOGLE_CLOUD__API_KEY is silently ignored and the loader
+        # falls back to defaults — i.e. every nested knob in .env.example would be a lie.
+        env_nested_delimiter="__",
+        extra="ignore",
     )
 
     app_name: str = "ttsgrab"
@@ -260,6 +270,59 @@ def _ensure_async_driver(url: str) -> str:
     return url
 
 
+def _validate_config_keys(raw: dict[str, Any], path: Path) -> None:
+    """Reject unknown keys in config.yaml.
+
+    ``extra="ignore"`` is right for environment variables — a shell is full of unrelated
+    names — but wrong for a file a human edits. A typo in
+    ``google_cloud.monthly_budget_micro_usd`` would otherwise be dropped in silence while
+    the operator believed they had set a spending cap. Fail loudly instead.
+    """
+    from pydantic import BaseModel
+
+    def check(model: type[BaseModel], data: dict[str, Any], prefix: str) -> None:
+        unknown: list[str] = []
+        for key, value in data.items():
+            field = model.model_fields.get(key)
+            if field is None:
+                unknown.append(f"{prefix}{key}")
+                continue
+            annotation = field.annotation
+            if (
+                isinstance(value, dict)
+                and isinstance(annotation, type)
+                and issubclass(annotation, BaseModel)
+            ):
+                check(annotation, value, f"{prefix}{key}.")
+        if unknown:
+            raise ValueError(
+                f"{path}: unknown configuration key(s): {', '.join(sorted(unknown))}. "
+                "See config.example.yaml for the supported keys."
+            )
+
+    check(Settings, raw, "")
+
+
+class _FileSettingsSource(PydanticBaseSettingsSource):
+    """config.yaml as a *source*, not as init kwargs.
+
+    Passing the file as ``Settings(**data)`` makes it the highest-priority input, so an
+    environment variable can never override it — the opposite of what the README promises
+    and the opposite of what an operator expects when they set a value in `.env`.
+    Registering it as a source puts it below the environment, where it belongs.
+    """
+
+    def __init__(self, settings_cls: type[BaseSettings], data: dict[str, Any]) -> None:
+        super().__init__(settings_cls)
+        self._data = data
+
+    def get_field_value(self, field, field_name):
+        return self._data.get(field_name), field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return dict(self._data)
+
+
 def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings:
     """Build settings from defaults → config.yaml → env/`.env`."""
     raw: dict[str, Any] = {}
@@ -284,7 +347,37 @@ def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings
         else:
             sect[field] = value
 
-    settings = Settings(**raw)
+    _validate_config_keys(raw, path)
+
+    # Priority, highest first: init kwargs (none here) → environment → .env → config.yaml
+    # → defaults. The file is deliberately below the environment.
+    class _ConfigAwareSettings(Settings):
+        model_config = SettingsConfigDict(
+            env_prefix="TTSGRAB_",
+            env_file=".env",
+            env_file_encoding="utf-8",
+            env_nested_delimiter="__",
+            extra="ignore",
+        )
+
+        @classmethod
+        def settings_customise_sources(
+            cls,
+            settings_cls,
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        ):
+            return (
+                init_settings,
+                env_settings,
+                dotenv_settings,
+                _FileSettingsSource(settings_cls, raw),
+                file_secret_settings,
+            )
+
+    settings = _ConfigAwareSettings()
 
     # Plain env vars that pydantic-settings does not reach (nested, differently named).
     for env_var, (section, field) in _ENV_SECRETS.items():
