@@ -319,6 +319,8 @@ against reality.
 
 ## Docs
 
+- [Provider comparison](docs/providers.md) — quality, price, latency, languages, licences
+  and what each vendor's terms actually permit, in one table
 - [Adding a provider](docs/adding-a-provider.md) — the one-file tutorial, plus the models
   that were deliberately left out and why
 - [API reference](docs/api.md) — every endpoint, every error code
