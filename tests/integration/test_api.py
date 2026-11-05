@@ -653,3 +653,87 @@ async def test_openai_alias_request_succeeds_end_to_end(client, ctx) -> None:
     )
     assert r.status_code == 200, r.text
     assert len(r.content) > 100
+
+
+@pytest.mark.asyncio
+async def test_compare_reports_a_metric_row_per_target(client, ctx) -> None:
+    """The Compare page is only useful if every target comes back with numbers attached —
+    a row that is all nulls looks like a working comparison and tells you nothing."""
+    from ttsgrab.core.types import AudioFormat, Voice
+
+    providers = []
+    for name in ("a", "b", "c"):
+        provider = FakeProvider(ctx.settings, name=name)
+        provider._voices = [
+            Voice(
+                provider=name,
+                voice_id=f"{name}-v",
+                name=name,
+                languages=["en-US"],
+                formats=[AudioFormat.WAV],
+            )
+        ]
+        providers.append(provider)
+    install(ctx, *providers)
+
+    r = await client.post(
+        "/v1/compare",
+        json={
+            "text": "compare me",
+            "targets": [{"provider": n, "voice_id": f"{n}-v"} for n in ("a", "b", "c")],
+        },
+    )
+    assert r.status_code == 200, r.text
+    results = r.json()["results"]
+    assert len(results) == 3
+    for row in results:
+        # A successful row omits `error` entirely rather than sending null.
+        assert not row.get("error"), row
+        assert row["bytes"] > 0
+        assert row["latency_ms"] is not None
+        assert row["rtf"] is not None
+        assert "first_byte_ms" in row
+
+
+@pytest.mark.asyncio
+async def test_compare_isolates_a_failing_target(client, ctx) -> None:
+    """One dead provider must not lose the other two results."""
+    from tests.fakes import FakeBehaviour
+    from ttsgrab.core.types import AudioFormat, Voice
+
+    good = FakeProvider(ctx.settings, name="good")
+    good._voices = [
+        Voice(
+            provider="good",
+            voice_id="g-v",
+            name="g",
+            languages=["en-US"],
+            formats=[AudioFormat.WAV],
+        )
+    ]
+    bad = FakeProvider(ctx.settings, name="bad", behaviour=FakeBehaviour(failures=99))
+    bad._voices = [
+        Voice(
+            provider="bad",
+            voice_id="b-v",
+            name="b",
+            languages=["en-US"],
+            formats=[AudioFormat.WAV],
+        )
+    ]
+    install(ctx, good, bad)
+
+    r = await client.post(
+        "/v1/compare",
+        json={
+            "text": "half broken",
+            "targets": [
+                {"provider": "good", "voice_id": "g-v"},
+                {"provider": "bad", "voice_id": "b-v"},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    rows = {row["provider"]: row for row in r.json()["results"]}
+    assert rows["good"]["bytes"] > 0
+    assert rows["bad"].get("error")

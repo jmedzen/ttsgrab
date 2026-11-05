@@ -331,14 +331,18 @@ becomes an error row rather than failing the request:
     "provider": "edge", "voice_id": "zh-TW-HsiaoChenNeural",
     "history_id": "…", "audio_url": "/v1/history/…/audio",
     "format": "mp3", "bytes": 11520, "duration_ms": 2880,
-    "latency_ms": 1180, "rtf": 0.41,
+    "latency_ms": 1180, "first_byte_ms": 970, "rtf": 0.41,
     "characters": 10, "cost_micro_usd": 0, "cost_usd": 0.0,
     "cached": false, "unsupported": []
   }]
 }
 ```
 
-`rtf` is real-time factor: below 1.0 means faster than playback.
+`rtf` is real-time factor: below 1.0 means faster than playback — 0.41 means a 2.9 s clip
+took 1.2 s to produce.
+
+`first_byte_ms` is `null` for a provider that cannot stream. It is the number that decides
+whether an interface feels instant, so treat a null as "unknown", not as "zero".
 
 ---
 
