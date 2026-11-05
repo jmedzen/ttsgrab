@@ -7,8 +7,8 @@ request still succeeds, and the response says which provider actually served it"
 from __future__ import annotations
 
 import pytest
-from tests.fakes import FakeBehaviour, FakeProvider, install
 
+from tests.fakes import FakeBehaviour, FakeProvider, install
 from ttsgrab.core.errors import AllProvidersFailed, BudgetExceeded
 from ttsgrab.core.router import Orchestrator
 from ttsgrab.core.types import CostClass, SynthRequest

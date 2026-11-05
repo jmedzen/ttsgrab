@@ -44,8 +44,12 @@ def _find_pricing_file(config_dir: Path | None) -> Path | None:
     """Locate ``pricing.yaml`` without depending on the process working directory.
 
     Order: explicit ``config_dir``, ``$TTSGRAB_CONFIG_DIR``, the config file's own directory,
-    the CWD, then the packaged copy. A container starts in ``/`` and a systemd unit starts in
-    ``/``, so a CWD-only lookup would silently fall back to built-in prices.
+    the CWD, then upward from the installed package. A container starts in ``/`` and a
+    systemd unit starts in ``/``, so a CWD-only lookup would silently fall back to built-in
+    prices — the operator would think they had overridden them and they would not have.
+
+    Walking upward (rather than assuming a fixed depth) is what makes this work for an
+    editable install at ``src/ttsgrab`` and a wheel install in site-packages at once.
     """
     candidates: list[Path] = []
     if config_dir is not None:
@@ -57,11 +61,11 @@ def _find_pricing_file(config_dir: Path | None) -> Path | None:
     if cfg:
         candidates.append(Path(cfg).parent / "pricing.yaml")
     candidates.append(Path.cwd() / "pricing.yaml")
-    package_root = Path(__file__).resolve().parent.parent
-    # Shipped inside the wheel, so an installed package still has a copy to read.
-    candidates.append(package_root / "pricing.yaml")
-    # A source checkout: the repo root, one level above the package.
-    candidates.append(package_root.parent / "pricing.yaml")
+
+    package_dir = Path(__file__).resolve().parent
+    for parent in (package_dir, *package_dir.parents):
+        candidates.append(parent / "pricing.yaml")
+
     for candidate in candidates:
         if candidate.is_file():
             return candidate

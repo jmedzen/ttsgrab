@@ -7,6 +7,7 @@ wiring between the API layer, the pipeline, the database and the cache.
 from __future__ import annotations
 
 import pytest
+
 from tests.fakes import FakeBehaviour, FakeProvider, install
 
 

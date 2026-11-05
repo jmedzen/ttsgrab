@@ -26,7 +26,10 @@ jobs:
       - name: Create venv
         run: uv venv --python 3.12
       - name: Install
-        run: uv pip install -e ".[dev]"
+        # Same extras as the test job: mypy's verdict depends on whether the optional
+        # `mcp` package is importable, and a lint job with different deps than the test job
+        # produces failures nobody can reproduce locally.
+        run: uv pip install -e ".[dev,mcp]"
       - name: Ruff
         run: .venv/bin/ruff check src tests workers alembic
       - name: Format check
