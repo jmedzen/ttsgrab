@@ -281,6 +281,41 @@ you do not control.
 
 ---
 
+## Versions and builds
+
+`0.1.0` alone cannot answer "which build are you running?" — every commit since the last
+version bump reports the same number. So there are two:
+
+| | Where it comes from | Moves when |
+|---|---|---|
+| `version` | `pyproject.toml`, read back via package metadata | a human decides to bump it |
+| `build` | the git commit count, written to `build_info.json` | **every commit** |
+
+```bash
+make build-info        # regenerate build_info.json (make web / make build do it first)
+curl -s localhost:8000/healthz | python3 -m json.tool
+```
+
+```json
+{"status": "ok", "version": "0.1.0", "build": 19, "commit": "e256820",
+ "dirty": false, "built_at": "2026-11-05T14:58:44Z"}
+```
+
+The same numbers appear in the UI footer, in `/v1/capabilities`, and in the startup log
+line, so nobody has to ask. `build` is `null` rather than `0` when nothing supplied it —
+a plain source checkout, or an image built without the build-arg — because "unknown" and
+"build zero" are different facts.
+
+`dirty: true` means the code came from a working tree with uncommitted changes. That is
+worth noticing: the build number is still correct, but it no longer uniquely identifies
+the code.
+
+Docker images are tagged `0.1.0-19` (version-build) and carry OCI labels including
+`ttsgrab.build`. `make build` passes the number through as a build arg, since the build
+context has no `.git`.
+
+---
+
 ## Verifying it works
 
 ```bash

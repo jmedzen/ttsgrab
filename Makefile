@@ -16,6 +16,12 @@ UV      ?= uv
 export UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 export npm_config_cache ?= $(CURDIR)/.npm-cache
 
+# Read the version from pyproject.toml rather than repeating it in image tags, where it
+# silently goes stale the first time someone bumps the version.
+VERSION := $(shell grep -m1 '^version' pyproject.toml | sed -E 's/.*"(.*)".*/\1/')
+BUILD   := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+IMAGE_TAG ?= $(VERSION)-$(BUILD)
+
 .PHONY: help
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -59,16 +65,22 @@ ps: ## Show container status
 	$(COMPOSE) ps
 
 .PHONY: build
-build: ## Build all images for linux/amd64
+build: build-info ## Build all images for linux/amd64
 	docker buildx build --platform linux/amd64 \
-	  -f deploy/Dockerfile.gateway -t ttsgrab/gateway:0.1.0 .
+	  --build-arg VERSION=$(VERSION) --build-arg BUILD=$(BUILD) \
+	  --build-arg VCS_REF=$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+	  -f deploy/Dockerfile.gateway -t ttsgrab/gateway:$(IMAGE_TAG) \
+	  -t ttsgrab/gateway:$(VERSION) .
 	docker buildx build --platform linux/amd64 \
-	  -f deploy/Dockerfile.worker --build-arg WORKER=kokoro -t ttsgrab/worker-kokoro:0.1.0 .
+	  -f deploy/Dockerfile.worker --build-arg WORKER=kokoro \
+	  -t ttsgrab/worker-kokoro:$(IMAGE_TAG) .
 
 .PHONY: build-arm64
-build-arm64: ## Build all images for linux/arm64 (Apple Silicon, ARM NAS)
+build-arm64: build-info ## Build all images for linux/arm64 (Apple Silicon, ARM NAS)
 	docker buildx build --platform linux/arm64 \
-	  -f deploy/Dockerfile.gateway -t ttsgrab/gateway:0.1.0-arm64 .
+	  --build-arg VERSION=$(VERSION) --build-arg BUILD=$(BUILD) \
+	  --build-arg VCS_REF=$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+	  -f deploy/Dockerfile.gateway -t ttsgrab/gateway:$(IMAGE_TAG)-arm64 .
 
 # -- local development (no Docker) ------------------------------------------------------
 
@@ -85,8 +97,12 @@ dev: ## Run the gateway with autoreload on :8000
 web-dev: ## Run the Vite dev server on :5173 (proxies /v1 to :8000)
 	cd web && npm run dev
 
+.PHONY: build-info
+build-info: ## Regenerate src/ttsgrab/build_info.json from git (the build number)
+	$(VENV)/bin/python scripts/build_info.py
+
 .PHONY: web
-web: ## Build the SPA into the Python package
+web: build-info ## Build the SPA into the Python package
 	cd web && npm run build
 
 .PHONY: test

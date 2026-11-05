@@ -258,7 +258,20 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
+export interface BuildInfo {
+  version: string
+  build: number | null
+  commit: string | null
+  dirty: boolean
+  built_at: string | null
+}
+
 export const api = {
+  /** Unauthenticated on purpose — the footer should show it without a token. */
+  async buildInfo(): Promise<BuildInfo> {
+    return json<BuildInfo>('/healthz')
+  },
+
   async voices(params: {
     provider?: string
     language?: string

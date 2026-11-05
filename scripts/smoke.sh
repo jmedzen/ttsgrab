@@ -40,7 +40,7 @@ else
 fi
 
 # 2. the catalogue has voices -----------------------------------------------------------
-voices=$(curl -s "$BASE/v1/voices")
+voices=$(curl -s "$BASE/v1/voices" "${auth[@]+"${auth[@]}"}")
 count=$(printf '%s' "$voices" | grep -o '"voice_id"' | wc -l | tr -d ' ')
 if [ "$count" -gt 0 ]; then
   ok "voice catalogue has $count voices"
@@ -141,7 +141,7 @@ else
 fi
 
 # 10. Google usage (acceptance #2) — needs credentials ---------------------------------
-providers=$(curl -s "$BASE/v1/providers")
+providers=$(curl -s "$BASE/v1/providers" "${auth[@]+"${auth[@]}"}")
 if printf '%s' "$providers" | grep -q '"name":"google_cloud"[^}]*"enabled":true'; then
   usage=$(curl -s "$BASE/v1/usage" "${auth[@]+"${auth[@]}"}")
   if printf '%s' "$usage" | grep -q '"characters"'; then

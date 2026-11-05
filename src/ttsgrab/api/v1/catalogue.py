@@ -177,15 +177,19 @@ async def refresh_provider(name: str, ctx: Ctx, principal: PrincipalDep) -> dict
 
 @router.get("/v1/capabilities", summary="What the gateway supports, for client discovery")
 async def capabilities(ctx: Ctx) -> dict[str, Any]:
+    from ttsgrab.buildinfo import build_info
     from ttsgrab.core.audio import has_ffmpeg
+    from ttsgrab.core.textsplit import has_opencc
 
     return {
+        # A client that caches capabilities needs to know when they changed.
+        **build_info().as_dict(),
         "formats": ["mp3", "wav", "opus", "flac"],
         "sample_rates": [8000, 16000, 22050, 24000, 32000, 44100, 48000],
         "policies": ["cheapest", "fastest", "best_quality", "local_only", "free_only", "explicit"],
         "max_text_chars": ctx.settings.security.max_text_chars,
         "ffmpeg": has_ffmpeg(),
-        "opencc": __import__("ttsgrab.core.textsplit", fromlist=["has_opencc"]).has_opencc(),
+        "opencc": has_opencc(),
         "streaming": True,
         "openai_compatible": "/v1/audio/speech",
         "mcp": "/mcp",

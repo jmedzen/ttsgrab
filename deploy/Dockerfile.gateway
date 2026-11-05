@@ -4,6 +4,13 @@
 # dependency ships an aarch64 wheel. `ffmpeg` is installed at runtime, not build time, so
 # the toolchain layer stays out of the final image.
 
+# Build metadata. The build context has no `.git` (and should not — it would be a
+# 100 MB COPY and a cache-buster), so the number is passed in by `make build`, which runs
+# scripts/build_info.py first. `TTSGRAB_BUILD` then overrides the baked file at runtime.
+ARG VERSION=0.0.0
+ARG BUILD=0
+ARG VCS_REF=unknown
+
 # ---------- stage 1: build the SPA ----------
 FROM node:22.11.0-bookworm-slim AS web
 WORKDIR /web
@@ -49,6 +56,32 @@ RUN groupadd --gid "${GID}" ttsgrab \
 
 COPY --from=wheels /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+
+ARG VERSION
+ARG BUILD
+ARG VCS_REF
+# Overwrite whatever build_info.json came from the wheel, so the image reports its own
+# build rather than the one belonging to whichever checkout produced the wheel.
+RUN VERSION="${VERSION}" BUILD="${BUILD}" VCS_REF="${VCS_REF}" python - <<'EOF'
+import json, os, pathlib
+target = pathlib.Path("/usr/local/lib/python3.11/site-packages/ttsgrab/build_info.json")
+target.write_text(json.dumps({
+    "version": os.environ["VERSION"],
+    "build": int(os.environ["BUILD"]),
+    "commit": os.environ["VCS_REF"],
+    "branch": None,
+    "dirty": False,
+    "built_at": None,
+}, indent=2) + "\n")
+print("baked build info:", target.read_text())
+EOF
+
+LABEL org.opencontainers.image.title="ttsgrab gateway" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/jmedzen/ttsgrab" \
+      ttsgrab.build="${BUILD}"
 
 # The built SPA replaces whatever the wheel shipped with.
 COPY --from=web /src/ttsgrab/web/ /usr/local/lib/python3.11/site-packages/ttsgrab/web/

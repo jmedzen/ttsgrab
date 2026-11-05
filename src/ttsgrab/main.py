@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from ttsgrab import __version__
+from ttsgrab.buildinfo import build_info
 from ttsgrab.core.context import build_context
 from ttsgrab.core.errors import ErrorBody, ErrorCode, ErrorEnvelope, GatewayError
 from ttsgrab.core.obs import (
@@ -78,7 +79,7 @@ async def lifespan(app: FastAPI):
 
     log.info(
         "ttsgrab %s ready — providers=%s voices=%d db=%s",
-        __version__,
+        build_info().label(),
         [p.name for p in ctx.registry.enabled()],
         len(ctx.registry.catalogue()),
         settings.database_url.split("///")[-1],
@@ -238,7 +239,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/healthz", tags=["ops"], summary="Liveness")
     async def healthz() -> dict[str, Any]:
-        return {"status": "ok", "version": __version__}
+        # Kept flat and additive: existing callers read `version`, and adding `build`
+        # alongside it does not break them.
+        return {"status": "ok", **build_info().as_dict()}
 
     @app.get("/readyz", tags=["ops"], summary="Readiness (checks DB and providers)")
     async def readyz(request: Request) -> Response:

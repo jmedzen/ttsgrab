@@ -10,6 +10,7 @@ import History from './pages/History'
 import Usage from './pages/Usage'
 import Keys from './pages/Keys'
 import { setLanguage } from './i18n'
+import { api, type BuildInfo } from './lib/api'
 
 const NAV = [
   { to: '/', key: 'playground', end: true },
@@ -38,6 +39,12 @@ export default function App() {
   const { t, i18n } = useTranslation()
   const { dark, toggle } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [build, setBuild] = useState<BuildInfo | null>(null)
+
+  useEffect(() => {
+    // A failed lookup must not break the UI; the footer simply omits the build.
+    api.buildInfo().then(setBuild).catch(() => setBuild(null))
+  }, [])
 
   return (
     <div className="flex min-h-full flex-col">
@@ -145,6 +152,18 @@ export default function App() {
         <a className="underline hover:text-accent-500" href="/openapi.json">
           OpenAPI
         </a>
+        {build && (
+          <>
+            {' '}
+            ·{' '}
+            {/* The footer is where someone looks when asked "which version are you on?" */}
+            <span title={build.commit ?? undefined} className="tabular-nums">
+              {build.version}
+              {build.build !== null && ` · build ${build.build}`}
+              {build.dirty && ' · dirty'}
+            </span>
+          </>
+        )}
       </footer>
     </div>
   )

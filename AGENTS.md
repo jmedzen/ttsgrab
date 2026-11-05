@@ -74,7 +74,7 @@ Returns raw audio bytes (mp3 by default). Read the headers:
 | POST | `/v1/tts/estimate` | Duration + cost, no synthesis, no charge |
 | GET | `/v1/voices` | The catalogue. Filter by `language`, `provider`, `free_only` |
 | GET | `/v1/providers` | Health, cost class, `official` flag, `stability` |
-| GET | `/v1/capabilities` | Formats, sample rates, policies, limits |
+| GET | `/v1/capabilities` | Formats, sample rates, policies, limits, and the running build |
 | POST | `/v1/compare` | Same text across up to 8 targets, with metrics |
 | POST | `/v1/audio/speech` | OpenAI-compatible; change only `base_url` in the SDK |
 | POST | `/v1/jobs` | Async job with optional `webhook_url` |
@@ -82,6 +82,7 @@ Returns raw audio bytes (mp3 by default). Read the headers:
 | GET | `/v1/usage` | This month's characters and cost per provider |
 | GET | `/v1/history` | Past syntheses, replayable |
 | — | `/mcp` | MCP tools: `synthesize_speech`, `list_voices`, `list_providers`, `get_usage` |
+| GET | `/healthz` | Liveness **and the build number** — quote it in bug reports |
 | — | `/llms.txt`, `/agents.md` | This document, machine-readable |
 
 ---

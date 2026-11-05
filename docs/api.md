@@ -300,6 +300,31 @@ need.
 | `GET /readyz` | Readiness. Checks the database and that at least one provider loaded. 503 while starting. |
 | `GET /metrics` | Prometheus text format: request counts, latency histograms, cache hits, provider up/down. |
 
+`/healthz` answers the question you actually ask during an incident:
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "build": 19,
+  "commit": "e256820",
+  "dirty": false,
+  "built_at": "2026-11-05T14:58:44Z"
+}
+```
+
+`version` is the semantic version and moves rarely — every commit since the last bump
+reports the same one. `build` increments on **every commit** (it is the git commit count),
+which is what distinguishes "the build with the fix" from "the build without it". `commit`
+is the short SHA, and `dirty: true` means the tree it was built from had uncommitted
+changes — so the same build number does not necessarily mean the same code.
+
+`build` is `null` when nothing supplied it: a plain source checkout that never ran
+`make build-info`, or an image built without the build-arg. Treat null as "unknown", and
+never as zero.
+
+`/readyz` is a different question:
+
 ```json
 {"status": "ready", "checks": {"database": "ok", "providers": "ok",
  "providers_enabled": ["edge"], "voices": 322}}
