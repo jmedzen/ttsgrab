@@ -550,3 +550,106 @@ async def test_every_provider_with_a_budget_enforces_it(ctx) -> None:
             )
             with pytest.raises(BudgetExceeded):
                 await ctx.usage.check_budget(session, provider=provider, tier=None, characters=1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("alias", ["alloy", "nova", "shimmer", "echo", "fable", "onyx"])
+async def test_openai_voice_aliases_resolve_to_existing_voices(client, ctx, alias) -> None:
+    """The SDK's default voice is "alloy", which means nothing to any real engine.
+
+    An unchanged OpenAI client sends that name, so it has to map to something the
+    catalogue actually contains — otherwise the first request anyone makes fails.
+    """
+    from ttsgrab.api.v1.openai_compat import ALIASES, _resolve_voice
+
+    a_fake(ctx)
+    provider = ctx.registry.get("fake")
+    assert provider is not None
+
+    # Publish every voice the alias table can point at, so the table itself is under test.
+    from ttsgrab.core.types import AudioFormat, Voice
+
+    candidates = {v for mapping in ALIASES.values() for v in mapping.values()}
+    provider._voices = [
+        Voice(
+            provider="fake",
+            voice_id=voice_id,
+            name=voice_id,
+            languages=["en-US"],
+            formats=[AudioFormat.WAV],
+        )
+        for voice_id in sorted(candidates)
+    ]
+    available = {v.voice_id for v in provider._voices}
+
+    for language in ("en-US", "zh-TW"):
+        resolved = _resolve_voice(ctx, alias, language, None)
+        assert resolved in available, (
+            f"{alias} resolved to {resolved!r}, which no provider offers "
+            f"(available: {sorted(available)})"
+        )
+
+
+@pytest.mark.asyncio
+async def test_openai_real_voice_id_beats_an_alias(client, ctx) -> None:
+    """If someone names a real voice that happens to collide with an alias, the real voice
+    must win — otherwise they silently get a different speaker."""
+    from ttsgrab.api.v1.openai_compat import _resolve_voice
+
+    a_fake(ctx)
+    provider = ctx.registry.get("fake")
+    assert provider is not None
+    from ttsgrab.core.types import AudioFormat, Voice
+
+    provider._voices = [
+        Voice(
+            provider="fake",
+            voice_id="alloy",
+            name="Someone named their voice alloy",
+            languages=["en-US"],
+            formats=[AudioFormat.WAV],
+        )
+    ]
+    assert _resolve_voice(ctx, "alloy", "en-US", None) == "alloy"
+
+
+@pytest.mark.asyncio
+async def test_openai_unknown_voice_is_refused_clearly(client, ctx) -> None:
+    a_fake(ctx)
+    r = await client.post(
+        "/v1/audio/speech",
+        json={"model": "tts-1", "input": "x", "voice": "definitely-not-a-voice"},
+    )
+    assert r.status_code >= 400
+    body = r.json()
+    assert "error" in body and "message" in body["error"]
+
+
+@pytest.mark.asyncio
+async def test_openai_alias_request_succeeds_end_to_end(client, ctx) -> None:
+    """The whole point: an unchanged SDK call with voice="alloy" returns audio."""
+    a_fake(ctx)
+    provider = ctx.registry.get("fake")
+    assert provider is not None
+    from ttsgrab.core.types import AudioFormat, Voice
+
+    provider._voices = [
+        Voice(
+            provider="fake",
+            voice_id="en-US-AriaNeural",
+            name="Aria",
+            languages=["en-US"],
+            formats=[AudioFormat.WAV],
+        )
+    ]
+    r = await client.post(
+        "/v1/audio/speech",
+        json={
+            "model": "tts-1",
+            "input": "hello from an unchanged SDK",
+            "voice": "alloy",
+            "response_format": "wav",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert len(r.content) > 100
