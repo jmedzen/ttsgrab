@@ -45,7 +45,16 @@ async def synthesize(
     client: str | None = None,
     persist: bool = True,
     job_id: str | None = None,
+    pre_split: bool = False,
 ) -> SynthesisOutcome:
+    """Run the full pipeline for one request.
+
+    ``pre_split=True`` tells the pipeline the caller has already divided the text into
+    sentences it will synthesise sequentially. Without it, a streaming caller that sends
+    sentence one would have it re-split and synthesised in parallel *again* inside this
+    function — the outer pipeline would then be waiting on the whole document, and
+    first-byte latency would equal total latency.
+    """
     settings = ctx.settings
 
     text = (req.text or "").strip()
@@ -91,7 +100,8 @@ async def synthesize(
         text,
         normalize=settings.longform.enabled,
         dictionary=ctx.dictionary,
-        chunk_threshold=settings.longform.chunk_threshold,
+        # A caller that already split the text wants one chunk out of this call.
+        chunk_threshold=0 if pre_split else settings.longform.chunk_threshold,
         max_sentence_chars=settings.longform.max_sentence_chars,
         target_language=language,
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from collections import deque
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -187,8 +188,7 @@ async def tts_stream(
             max_sentence_chars=ctx.settings.longform.max_sentence_chars,
             target_language=req.language,
         )
-        # Pipeline: start the next chunk while yielding the current one.
-        tasks: list[asyncio.Task] = []
+        # Bound concurrent synthesis; the queue below decides how far ahead we run.
         sem = asyncio.Semaphore(ctx.settings.longform.max_concurrency)
 
         async def _synth(chunk: str):
@@ -202,49 +202,63 @@ async def tts_stream(
                     api_key_id=principal.id,
                     client=principal.name,
                     persist=False,
+                    pre_split=True,
                 )
 
         try:
-            for chunk in plan.chunks:
-                tasks.append(asyncio.create_task(_synth(chunk)))
-            for idx, task in enumerate(tasks):
+            # A streaming caller hears nothing until the *first* chunk is ready, so the
+            # window must stay small. Running the whole document at once means the first
+            # byte arrives when the last does, and the endpoint streams in name only. Two
+            # keeps one chunk synthesising while the previous one is being consumed.
+            window = 2
+            pending: deque[asyncio.Task] = deque()
+            next_chunk = 0
+            emitted = 0
+
+            def fill() -> None:
+                nonlocal next_chunk
+                while len(pending) < window and next_chunk < len(plan.chunks):
+                    pending.append(asyncio.create_task(_synth(plan.chunks[next_chunk])))
+                    next_chunk += 1
+
+            fill()
+
+            while pending:
+                task = pending.popleft()
+                outcome = await task
+                # Start the next chunk only once this one has been handed over, so the
+                # provider is never working on the whole document in advance.
+                fill()
+
                 if stream_format == "sse":
-                    outcome = await task
                     yield _sse(
                         "chunk",
                         {
-                            "index": idx,
+                            "index": emitted,
                             "audio_base64": base64.b64encode(outcome.result.audio).decode(),
                             "format": outcome.result.format.value,
                             "provider": outcome.result.provider,
                         },
                     )
+                elif pending or next_chunk < len(plan.chunks):
+                    yield outcome.result.audio
                 else:
-                    # For audio mode, stream provider-level chunks when we have only one
-                    # sentence, so the first bytes arrive as soon as they exist.
-                    if len(tasks) == 1 and provider is not None and provider.capabilities.streaming:
+                    # Last chunk, and the only one: let the provider stream it byte by byte
+                    # so a single-sentence request still gets a low first-byte latency.
+                    if emitted == 0 and provider is not None and provider.capabilities.streaming:
                         async for blob in provider.stream(
                             req.model_copy(update={"provider": provider.name})
                         ):
                             yield blob
-                        continue
-                    outcome = await task
-                    yield outcome.result.audio
+                    else:
+                        yield outcome.result.audio
+                emitted += 1
+
             if stream_format == "sse":
-                completed = [t.result() for t in tasks if t.done() and not t.cancelled()]
-                first = completed[0].result if completed else None
-                yield _sse(
-                    "done",
-                    {
-                        "chunks": len(plan.chunks),
-                        "provider": first.provider if first else None,
-                        "cost_micro_usd": sum(c.result.cost_micro_usd for c in completed)
-                        if completed
-                        else 0,
-                    },
-                )
+                yield _sse("done", {"chunks": len(plan.chunks)})
         finally:
-            for task in tasks:
+            # A caller that hangs up must not leave the provider synthesising for minutes.
+            for task in pending:
                 if not task.done():
                     task.cancel()
 
