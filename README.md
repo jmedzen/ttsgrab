@@ -298,13 +298,13 @@ Honest status of the acceptance list:
 |---|---|---|
 | 1 | `docker compose --profile core up` → Edge TTS audible in UI | ✅ the gateway **image** is built and smoke-tested in CI: container starts, 322 voices, 16 992 bytes of real audio from Edge, UI served. The full `core` profile with worker containers is still unbuilt here (no Docker on this machine) |
 | 2 | Google credentials → voices appear, usage correct | ⚠️ adapter unit-tested against a mocked API; **not** verified against the live Google API (no account) |
-| 3 | Register LAN worker, then kill it → auto-fallback | ✅ verified end-to-end (`x-ttsgrab-fallback: stub->edge`) |
+| 3 | Register LAN worker, then kill it → auto-fallback | ✅ verified end-to-end: a worker speaking the real three-endpoint protocol registered over HTTP, served audio (`X-TTSGrab-Provider: synthetic`), then was killed — the next identical request fell back to `edge` and still returned audio. This run also found a real bug: a worker sending `"Female"` instead of `"female"` made its entire voice list fail validation and silently removed the backend |
 | 4 | OpenAI SDK with only `base_url` changed | ✅ verified |
 | 5 | MCP client lists voices and synthesises | ✅ verified with the real MCP client |
 | 6 | Compare page across ≥3 providers | ✅ verified e2e |
 | 7 | No keys in logs, frontend or git history | ✅ log scrubber + secret-pattern smoke check; `gitleaks` in CI |
 
-What CI proves on every push: lint, mypy, 127 tests on Python 3.11 and 3.12, the SPA
+What CI proves on every push: lint, mypy, the full pytest suite on Python 3.11 and 3.12, the SPA
 typecheck and build, six Playwright tests against a live server, the 13-check smoke script,
 a `linux/amd64` gateway image build, a container boot that synthesises real audio, the CPU
 worker image, and a full-history secret scan.
