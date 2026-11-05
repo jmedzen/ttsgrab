@@ -223,6 +223,21 @@ def build_app(engine: TTSEngine, *, max_concurrency: int = 1) -> FastAPI:
     @app.post("/synthesize")
     async def synthesize(body: SynthesizeBody) -> Response:
         await engine.ensure_loaded()
+
+        # A worker is reachable directly on the LAN, so it cannot assume the gateway already
+        # validated the request. Checking here turns a confusing model-level failure into a
+        # clear 4xx.
+        known = {v.voice_id: v for v in await engine.voices()}
+        spec = known.get(body.voice_id)
+        if spec is None:
+            raise HTTPException(404, f"unknown voice_id {body.voice_id!r}")
+        if spec.cloning and not body.reference_audio:
+            raise HTTPException(
+                422,
+                f"voice {body.voice_id!r} is a cloning voice and needs reference_audio "
+                "(base64 WAV of the speaker to imitate)",
+            )
+
         reference_wav = None
         if body.reference_audio:
             try:
