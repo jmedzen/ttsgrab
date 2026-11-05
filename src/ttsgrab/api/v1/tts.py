@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 from collections import deque
 from typing import Any
@@ -258,9 +259,14 @@ async def tts_stream(
                 yield _sse("done", {"chunks": len(plan.chunks)})
         finally:
             # A caller that hangs up must not leave the provider synthesising for minutes.
-            for task in pending:
-                if not task.done():
-                    task.cancel()
+            # Cancelling only *requests* the stop; awaiting is what makes the generator
+            # close before this response is torn down.
+            cancelled = [t for t in pending if not t.done()]
+            for task in cancelled:
+                task.cancel()
+            for task in cancelled:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     media = "text/event-stream" if stream_format == "sse" else req.format.mime
     return StreamingResponse(

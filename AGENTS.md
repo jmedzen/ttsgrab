@@ -102,6 +102,7 @@ Branch on `code`, never on `message` — messages are for humans and may change.
 | `unauthorized` / `forbidden` | no | Fix the credential or allowlist |
 | `not_found` | no | Re-fetch the catalogue |
 | `text_too_long` | no | Split the text, or use `/v1/jobs` |
+| `request_too_large` | no | The body exceeded the operator's limit; send less |
 | `unsupported_param` | no | Drop the parameter or try another provider |
 | `rate_limited` | **yes** | Back off; honour `Retry-After` |
 | `budget_exceeded` | no | Stop. Tell the human |

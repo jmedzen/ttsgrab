@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, File, Form, UploadFile
 from sqlalchemy import delete, select
 
-from ttsgrab.api.deps import Ctx, PrincipalDep, write_audit
+from ttsgrab.api.deps import AdminDep, Ctx, write_audit
 from ttsgrab.api.schemas import WorkerIn, WorkerOut
 from ttsgrab.core.errors import InvalidRequest, NotFound
 from ttsgrab.core.security import SsrfGuard, validate_upload
@@ -38,14 +38,14 @@ def _worker_out(node: WorkerNode, ctx) -> WorkerOut:
 
 
 @router.get("/v1/workers", summary="List registered local workers")
-async def list_workers(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def list_workers(ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     async with session_scope() as session:
         rows = (await session.execute(select(WorkerNode).order_by(WorkerNode.name))).scalars().all()
         return {"workers": [_worker_out(n, ctx).model_dump() for n in rows]}
 
 
 @router.post("/v1/workers", summary="Register a local worker by base_url")
-async def add_worker(body: WorkerIn, ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def add_worker(body: WorkerIn, ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     guard = SsrfGuard(
         allow_private=ctx.settings.security.allow_private_worker_urls,
         allowed_hosts=ctx.settings.security.allowed_worker_hosts,
@@ -96,7 +96,7 @@ async def add_worker(body: WorkerIn, ctx: Ctx, principal: PrincipalDep) -> dict[
 
 
 @router.post("/v1/workers/{worker_id}/check", summary="Run an immediate health check")
-async def check_worker(worker_id: str, ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def check_worker(worker_id: str, ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     from ttsgrab.workers.monitor import WorkerMonitor
 
     monitor: WorkerMonitor | None = ctx.extras.get("worker_monitor")
@@ -114,7 +114,7 @@ async def check_worker(worker_id: str, ctx: Ctx, principal: PrincipalDep) -> dic
 
 
 @router.delete("/v1/workers/{worker_id}", summary="Remove a worker")
-async def delete_worker(worker_id: str, ctx: Ctx, principal: PrincipalDep) -> dict[str, str]:
+async def delete_worker(worker_id: str, ctx: Ctx, principal: AdminDep) -> dict[str, str]:
     async with session_scope() as session:
         node = await session.get(WorkerNode, worker_id)
         if node is None:
@@ -144,7 +144,7 @@ def _ref_out(ref: ReferenceAudio) -> dict[str, Any]:
 
 
 @router.get("/v1/references", summary="List uploaded reference clips")
-async def list_references(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def list_references(ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     async with session_scope() as session:
         rows = (
             (
@@ -161,7 +161,7 @@ async def list_references(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
 @router.post("/v1/references", summary="Upload a reference clip for voice cloning")
 async def upload_reference(
     ctx: Ctx,
-    principal: PrincipalDep,
+    principal: AdminDep,
     file: UploadFile = File(...),
     name: str = Form(...),
     provider: str = Form(...),
@@ -239,7 +239,7 @@ async def upload_reference(
 
 
 @router.get("/v1/references/{ref_id}/audio", summary="Fetch a reference clip")
-async def get_reference_audio(ref_id: str, ctx: Ctx) -> Any:
+async def get_reference_audio(ref_id: str, ctx: Ctx, principal: AdminDep) -> Any:
     from fastapi.responses import FileResponse
 
     async with session_scope() as session:
@@ -253,7 +253,7 @@ async def get_reference_audio(ref_id: str, ctx: Ctx) -> Any:
 
 
 @router.delete("/v1/references/{ref_id}", summary="Delete a reference clip")
-async def delete_reference(ref_id: str, ctx: Ctx, principal: PrincipalDep) -> dict[str, str]:
+async def delete_reference(ref_id: str, ctx: Ctx, principal: AdminDep) -> dict[str, str]:
     async with session_scope() as session:
         ref = await session.get(ReferenceAudio, ref_id)
         if ref is None:

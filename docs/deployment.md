@@ -252,11 +252,33 @@ tts.example.com {
 5. **Pin the workers** with `security.allowed_worker_hosts` if you do not want anything
    else on the network registrable.
 
-6. **Set `cache.ttl_seconds` deliberately.** The default is 30 days. On a paid provider a
+   Worker `base_url` and job `webhook_url` are both caller-supplied outbound requests, so
+   both go through the same SSRF guard: link-local (including cloud metadata at
+   `169.254.169.254`) is always refused, and private ranges are refused for webhooks unless
+   you set `security.allow_private_webhooks: true`. Set it when your webhook receiver is a
+   bot on the LAN; leave it off otherwise.
+
+6. **Decide about `X-Forwarded-For` before you put a proxy in front.**
+   `security.trusted_proxy_hops` defaults to `0`, which means the header is ignored and the
+   socket peer is used. That is the safe default: a client sets that header itself, so
+   believing it lets anyone claim to be `127.0.0.1`, and with
+   `allow_localhost_without_token` that is admin access.
+
+   Behind Caddy/Traefik/nginx, set it to the number of proxies you actually run:
+
+   ```bash
+   TTSGRAB_SECURITY__TRUSTED_PROXY_HOPS=1    # one reverse proxy in front
+   ```
+
+   Set it too high and you trust an entry the client supplied. Set it to `0` behind a proxy
+   and every caller looks like the proxy's IP — which breaks per-IP rate limiting but
+   grants nobody anything.
+
+7. **Set `cache.ttl_seconds` deliberately.** The default is 30 days. On a paid provider a
    long TTL is free money; on a cloning workflow it means a re-recorded reference will not
    be heard until the entry expires.
 
-7. **Tune the circuit breaker to your providers.** `router.circuit_breaker_threshold` is how
+8. **Tune the circuit breaker to your providers.** `router.circuit_breaker_threshold` is how
    many consecutive failures take a provider out of rotation, and
    `router.circuit_breaker_cooldown_s` is how long it stays out.
 

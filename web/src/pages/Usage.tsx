@@ -1,13 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api, formatUsd } from '../lib/api'
+import QueryError from '../components/QueryError'
 
 export default function Usage() {
   const { t } = useTranslation()
-  const { data, isLoading } = useQuery({ queryKey: ['usage'], queryFn: () => api.usage(30) })
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['usage'], queryFn: () => api.usage(30) })
 
   if (isLoading) return <p className="text-sm text-ink-500">{t('common.loading')}</p>
-  if (!data) return null
+  // `return null` here would render a blank page, which looks like a working page with no
+  // data. The user cannot tell the difference, so say what happened.
+  if (isError) return <QueryError error={error} onRetry={() => void refetch()} />
+  if (!data) return <p className="text-sm text-ink-500">{t('usage.noData')}</p>
 
   const freeTiers = Object.entries(data.free_tier)
   const providers = Object.entries(data.by_provider)

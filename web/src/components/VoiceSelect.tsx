@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type Voice } from '../lib/api'
 import clsx from 'clsx'
 import { useTranslation } from 'react-i18next'
@@ -9,16 +9,46 @@ interface Props {
   onChange: (voice: Voice) => void
   filterProvider?: string | null
   className?: string
+  /** Id of the visible <label>, so the popup button has an accessible name. */
+  ariaLabelledBy?: string
 }
 
 /**
  * Voice picker: provider-grouped list with search and language filter.
  * Providers that are disabled never show up, because /v1/voices only returns enabled ones.
  */
-export default function VoiceSelect({ value, onChange, filterProvider, className }: Props) {
+export default function VoiceSelect({
+  value,
+  onChange,
+  filterProvider,
+  className,
+  ariaLabelledBy,
+}: Props) {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // A popup that only closes when you click one of its own options traps the user: they
+  // have to pick something, or reload. Escape and an outside click are the two things
+  // everyone tries.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onPointer = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onPointer)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onPointer)
+    }
+  }, [open])
 
   const { data, isLoading } = useQuery({
     queryKey: ['voices', filterProvider ?? 'all'],
@@ -51,12 +81,17 @@ export default function VoiceSelect({ value, onChange, filterProvider, className
   )
 
   return (
-    <div className={clsx('relative', className)}>
+    <div className={clsx('relative', className)} ref={containerRef}>
       <button
         type="button"
         className="input flex items-center justify-between text-left"
         onClick={() => setOpen((v) => !v)}
         data-testid="voice-select"
+        // Without these a screen reader announces a plain button and gives no hint that
+        // a list will appear, or whether it currently is.
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={ariaLabelledBy}
       >
         <span className="truncate">
           {isLoading
@@ -78,6 +113,7 @@ export default function VoiceSelect({ value, onChange, filterProvider, className
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
               data-testid="voice-search"
+              aria-label={t('voices.searchPlaceholder')}
             />
           </div>
           <div className="max-h-64 overflow-y-auto">
@@ -122,7 +158,7 @@ export default function VoiceSelect({ value, onChange, filterProvider, className
                 ))}
                 {voices.length > 60 && (
                   <p className="px-3 py-1 text-xs text-ink-500">
-                    +{voices.length - 60} more — refine your search
+                    {t('voices.moreHidden', { count: voices.length - 60 })}
                   </p>
                 )}
               </div>

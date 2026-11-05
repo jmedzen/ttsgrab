@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 
 import pytest
 
@@ -119,3 +121,62 @@ async def test_corrupt_metadata_is_a_miss_not_a_crash(tmp_path) -> None:
     _blob, meta_path = cache._paths("k")
     meta_path.write_text("{not json", encoding="utf-8")
     assert await cache.get("k") is None
+
+
+async def _put(cache: DiskCache, key: str, audio: bytes = b"audio-bytes", **meta) -> None:
+    await cache.put(
+        key,
+        audio,
+        fmt=AudioFormat.MP3,
+        provider="edge",
+        voice_id="en-US-AriaNeural",
+        meta=meta or None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_reports_its_metadata(tmp_path) -> None:
+    """A hit returns both the blob path and the sidecar metadata."""
+    c = DiskCache(tmp_path, max_bytes=1 << 20, ttl_seconds=3600)
+    await _put(c, "k" * 40)
+    entry = await c.get("k" * 40)
+    assert entry is not None
+    assert entry.meta["provider"] == "edge"
+    assert entry.meta["voice_id"] == "en-US-AriaNeural"
+    assert await c.read(entry) == b"audio-bytes"
+
+
+@pytest.mark.asyncio
+async def test_missing_blob_is_a_miss_even_if_metadata_survives(tmp_path) -> None:
+    c = DiskCache(tmp_path, max_bytes=1 << 20, ttl_seconds=0)
+    await _put(c, "n" * 40)
+    blob_path, _meta = c._paths("n" * 40)
+    await asyncio.to_thread(blob_path.unlink)
+    assert await c.get("n" * 40) is None
+
+
+@pytest.mark.asyncio
+async def test_ttl_expiry_deletes_the_entry(tmp_path) -> None:
+    c = DiskCache(tmp_path, max_bytes=1 << 20, ttl_seconds=1)
+    await _put(c, "t" * 40)
+    blob_path, meta_path = c._paths("t" * 40)
+    # Backdate the sidecar so the entry is unambiguously stale.
+    stale = json.loads(await asyncio.to_thread(meta_path.read_text, "utf-8"))
+    stale["created_at"] = time.time() - 60
+    await asyncio.to_thread(meta_path.write_text, json.dumps(stale), "utf-8")
+
+    assert await c.get("t" * 40) is None
+    assert not blob_path.exists() and not meta_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_hit_refreshes_recency_for_lru(tmp_path) -> None:
+    """Reading an entry must protect it from eviction."""
+    c = DiskCache(tmp_path, max_bytes=1 << 20, ttl_seconds=0)
+    await _put(c, "a" * 40)
+    blob_path, _meta = c._paths("a" * 40)
+    before = (await asyncio.to_thread(blob_path.stat)).st_mtime
+    await asyncio.sleep(0.01)
+    await c.get("a" * 40)
+    after = (await asyncio.to_thread(blob_path.stat)).st_mtime
+    assert after >= before

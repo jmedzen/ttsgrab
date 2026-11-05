@@ -52,9 +52,21 @@ class SlidingWindowLimiter:
 
     def __init__(self) -> None:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._last_sweep = time.monotonic()
+        # A bucket that has gone quiet is dead weight forever otherwise: one dict entry per
+        # principal that ever made a request. Unbounded growth, driven by the caller.
+        self._sweep_interval_s = 300.0
+
+    def _sweep(self, now: float, window_s: float) -> None:
+        if now - self._last_sweep < self._sweep_interval_s:
+            return
+        self._last_sweep = now
+        for key in [k for k, hits in self._hits.items() if not hits or now - hits[-1] > window_s]:
+            del self._hits[key]
 
     def check(self, key: str, limit: int, window_s: float = 60.0) -> tuple[bool, int]:
         now = time.monotonic()
+        self._sweep(now, window_s)
         bucket = self._hits[key]
         while bucket and now - bucket[0] > window_s:
             bucket.popleft()
@@ -150,9 +162,8 @@ def validate_upload(
         )
     if sniffed not in allowed:
         raise InvalidRequest(f"mime type {sniffed!r} is not allowed")
-    if declared_mime and declared_mime.split(";")[0].strip() not in allowed:
-        # Declared type is advisory; magic bytes win, but report a mismatch.
-        pass
+    # `declared_mime` is deliberately not trusted: the caller chooses it, so believing it
+    # over the bytes on disk would defeat the check. Magic bytes are the answer.
     return sniffed
 
 

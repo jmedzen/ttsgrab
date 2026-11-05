@@ -30,6 +30,13 @@ class SecuritySettings(BaseModel):
     # When true, the UI can be opened without a token from localhost only.
     allow_localhost_without_token: bool = True
     rate_limit_per_minute: int = 120
+    # X-Forwarded-For is only believed when you say how many proxies sit in front. Left at
+    # 0 the header is ignored, because a client can set it to anything — including
+    # 127.0.0.1, which would otherwise grant localhost privileges to anyone.
+    trusted_proxy_hops: int = 0
+    # Webhook delivery is an outbound request to a caller-supplied URL. Private targets
+    # (a bot on the LAN) are common, so they are opt-in rather than assumed.
+    allow_private_webhooks: bool = False
     max_text_chars: int = 20000
     max_request_body_bytes: int = 2 * 1024 * 1024
     allowed_upload_mimes: list[str] = Field(

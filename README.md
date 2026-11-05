@@ -252,12 +252,51 @@ cache:
   max_bytes: 2147483648
   ttl_seconds: 2592000
 security:
-  max_text_chars: 8000
+  max_text_chars: 20000
+  max_request_body_bytes: 2097152
+  trusted_proxy_hops: 0
 ```
 
 Keys are read from env, `.env`, or `*_FILE` indirection for Docker secrets
 (`TTSGRAB_GOOGLE_CLOUD__CREDENTIALS_FILE`). They are never written to the database, never
 logged, and never sent to the browser — all upstream traffic goes through the backend.
+
+---
+
+## Security posture
+
+Three things you should know before exposing this to a network, because the defaults are
+chosen for a single-user machine and two of them assume you will read this paragraph.
+
+**`trusted_proxy_hops` is `0` by default, and that matters.** Behind a reverse proxy, the
+gateway cannot see the real client IP, so it falls back to the socket peer. If you set this
+to a nonzero value, the gateway believes `X-Forwarded-For` — a header the *client* controls.
+Believed carelessly, any caller can claim to be `127.0.0.1`, and with
+`allow_localhost_without_token` that is admin. Set it to exactly the number of proxies you
+run:
+
+```bash
+TTSGRAB_SECURITY__TRUSTED_PROXY_HOPS=1   # Caddy/Traefik/nginx in front
+```
+
+Leaving it at `0` behind a proxy breaks per-IP rate limiting (everyone looks like the proxy)
+but grants nobody anything. That is the failure mode you want.
+
+**Admin routes need the admin token, not just any key.** Key management (`/v1/keys`),
+worker registration (`/v1/workers`), reference uploads (`/v1/references`) and the audit log
+are admin-only. A scoped API key — one with a provider allowlist or a character quota — is
+deliberately *not* enough, because otherwise the allowlist would be a suggestion.
+
+**Two outbound requests are caller-supplied and therefore guarded.** A worker `base_url`
+and a job `webhook_url` both make the gateway fetch a URL someone else chose. Both pass the
+same SSRF check: non-HTTP schemes, link-local ranges (including cloud metadata at
+`169.254.169.254`) and — for webhooks — private ranges are refused unless you opt in with
+`security.allow_private_webhooks: true` (set it when your receiver is a bot on the LAN).
+
+The rest is ordinary hardening, covered in [docs/deployment.md](docs/deployment.md):
+`max_text_chars` and `max_request_body_bytes` are enforced before the body is parsed, uploads
+are validated by magic bytes rather than the declared content type, and reference audio is
+admin-only because a voice sample is biometric-adjacent data.
 
 ---
 
@@ -319,13 +358,22 @@ context has no `.git`.
 ## Verifying it works
 
 ```bash
-make test                                  # pytest: pricing, cache, routing, adapters, security
+make test                                  # pytest: 264 tests, ~78% statement coverage
 make test-e2e                              # Playwright: real synthesis in the browser
 ./scripts/smoke.sh http://127.0.0.1:8000   # the acceptance checklist, live
 ```
 
 `scripts/smoke.sh` walks the brief's acceptance criteria and prints one line per check.
 Checks that need credentials it does not have are reported as **skipped**, not as passes.
+
+The smoke script reads `TTSGRAB_ADMIN_TOKEN`; without it, any deployment that *has* an admin
+token will report failures that are really 401s. That is why the token is a variable rather
+than a hardcoded assumption — but it does mean a bare `./scripts/smoke.sh` against a
+protected server looks broken. Pass the token:
+
+```bash
+TTSGRAB_ADMIN_TOKEN=... ./scripts/smoke.sh http://127.0.0.1:8000
+```
 
 Honest status of the acceptance list:
 
@@ -361,6 +409,8 @@ against reality.
 - [API reference](docs/api.md) — every endpoint, every error code
 - [Deployment](docs/deployment.md) — single box, distributed GPU, HTTPS, Postgres
 - [Troubleshooting](docs/troubleshooting.md) — the failures you will actually hit
+- [Audit log](docs/audit.md) — what a security/memory/UX audit found, what was fixed, and
+  what is still open. Read this before assuming a guarantee
 - [`/llms.txt`](http://localhost:8000/llms.txt) and [`AGENTS.md`](AGENTS.md) — for agents
 
 ## Licence

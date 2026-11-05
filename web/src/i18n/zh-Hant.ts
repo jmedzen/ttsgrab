@@ -12,6 +12,7 @@ const zhHant: Translation = {
   },
   common: {
     loading: '載入中…',
+    loadFailed: '無法載入此頁',
     error: '發生錯誤',
     retry: '重試',
     cancel: '取消',
@@ -68,6 +69,7 @@ const zhHant: Translation = {
     showFreq: '波形',
   },
   compare: {
+    resultsLabel: '比較結果（可橫向捲動）',
     title: '比較',
     subtitle: '同一段文字一次送多個語音，並排試聽。',
     addTarget: '新增對象',
@@ -86,6 +88,7 @@ const zhHant: Translation = {
   voices: {
     title: '語音',
     subtitle: '所有已啟用供應商的語音目錄。',
+    moreHidden: '另有 {{count}} 個——請縮小搜尋範圍',
     searchPlaceholder: '以名稱、ID 或語言搜尋…',
     language: '語言',
     gender: '性別',

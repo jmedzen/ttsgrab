@@ -65,6 +65,7 @@ Branch on `code`, never on `message`.
 | `forbidden` | 403 | no | Credential valid but not permitted (allowlist, SSRF block) |
 | `not_found` | 404 | no | Unknown voice, job, worker, history id |
 | `text_too_long` | 413 | no | Over `security.max_text_chars` |
+| `request_too_large` | 413 | no | Over `security.max_request_body_bytes` — the body was refused unread |
 | `unsupported_param` | 422 | no | `strict: true` and the provider cannot honour a parameter |
 | `rate_limited` | 429 | **yes** | Slow down; `Retry-After` is set |
 | `budget_exceeded` | 402 | no | Monthly budget cap hit. Fix the budget, then retry |

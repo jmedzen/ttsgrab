@@ -151,8 +151,14 @@ export default function Playground() {
             </select>
           </div>
           <div>
-            <label className="label">{t('playground.voiceLabel')}</label>
-            <VoiceSelect value={voice} onChange={(v) => setVoice(v.voice_id)} />
+            <label className="label" id="voice-label">
+              {t('playground.voiceLabel')}
+            </label>
+            <VoiceSelect
+              value={voice}
+              onChange={(v) => setVoice(v.voice_id)}
+              ariaLabelledBy="voice-label"
+            />
           </div>
         </div>
 
@@ -260,13 +266,22 @@ export default function Playground() {
         <div className="mt-4 flex items-center gap-3">
           <button
             type="button"
-            className="btn-primary px-4 py-2"
+            className="btn-primary inline-flex items-center px-4 py-2"
             onClick={run}
             disabled={busy || !text.trim() || !voice}
             data-testid="synthesize"
           >
+            {busy && (
+              <span
+                className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                aria-hidden="true"
+              />
+            )}
             {busy ? t('playground.synthesizing') : t('playground.synthesize')}
           </button>
+          {/* The button already reads "synthesizing"; a second copy would be announced
+              twice. `aria-live` on the button label region is enough. */}
+
           {estimateQuery.data && (
             <span className="text-xs text-ink-500" data-testid="estimate">
               ≈ {formatMs(estimateQuery.data.estimated_duration_ms)} ·{' '}
@@ -278,6 +293,9 @@ export default function Playground() {
 
         {error && (
           <p
+            // Without this the message appears silently and a screen-reader user has no
+            // idea the request failed.
+            role="alert"
             className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
             data-testid="error"
           >

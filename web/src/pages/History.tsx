@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import QueryError from '../components/QueryError'
 import { api, formatBytes, formatMs, formatUsd } from '../lib/api'
 import AudioPlayer from '../components/AudioPlayer'
 
@@ -10,7 +11,7 @@ export default function History() {
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['history', q],
     queryFn: () => api.history({ limit: 100, q: q || undefined }),
   })
@@ -37,7 +38,8 @@ export default function History() {
       </header>
 
       {isLoading && <p className="text-sm text-ink-500">{t('common.loading')}</p>}
-      {!isLoading && (data?.items ?? []).length === 0 && (
+      {isError && <QueryError error={error} onRetry={() => void refetch()} />}
+      {!isLoading && !isError && (data?.items ?? []).length === 0 && (
         <p className="py-12 text-center text-sm text-ink-500">{t('history.empty')}</p>
       )}
 

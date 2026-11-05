@@ -152,7 +152,15 @@ export default function Compare() {
       </section>
 
       {rows.length > 0 && (
-        <section className="card overflow-x-auto p-0" data-testid="compare-results">
+        <section
+          className="card overflow-x-auto p-0"
+          data-testid="compare-results"
+          // A scrollable region that is not focusable cannot be scrolled with a keyboard,
+          // and without a role a screen reader does not announce that anything is there.
+          role="region"
+          aria-label={t('compare.resultsLabel')}
+          tabIndex={0}
+        >
           <table className="w-full min-w-[820px] text-sm">
             <thead className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500 dark:border-ink-800">
               <tr>

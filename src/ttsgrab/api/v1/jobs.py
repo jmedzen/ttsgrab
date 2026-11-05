@@ -55,7 +55,28 @@ async def _set_status(job_id: str, **fields: Any) -> None:
         await session.flush()
 
 
-async def _fire_webhook(url: str, payload: dict[str, Any]) -> int | None:
+def _webhook_private_allowed(ctx: Any) -> bool:
+    """Private webhook targets are the common case on a LAN (a bot on 192.168.x.x), so the
+    operator opts in rather than the gateway guessing."""
+    return bool(getattr(ctx.settings.security, "allow_private_webhooks", False))
+
+
+async def _fire_webhook(
+    url: str, payload: dict[str, Any], *, allow_private: bool = False
+) -> int | None:
+    """POST the result to the caller's URL.
+
+    The URL is caller-supplied, so it is an SSRF surface in exactly the same way a worker
+    base_url is: without a check, a job can make the gateway fetch cloud metadata or an
+    internal admin panel and report it back in `webhook_status`.
+    """
+    from ttsgrab.core.security import SsrfGuard
+
+    try:
+        SsrfGuard(allow_private=allow_private).validate(url)
+    except Exception as exc:
+        logger.warning("refusing webhook to %r: %s", url, exc)
+        return None
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, json=payload)
@@ -124,6 +145,7 @@ async def _run_job(ctx, job_id: str) -> None:
                         "duration_ms": outcome.duration_ms,
                     },
                 },
+                allow_private=_webhook_private_allowed(ctx),
             )
             await _set_status(job_id, webhook_status=status_code)
     except GatewayError as exc:
@@ -138,6 +160,7 @@ async def _run_job(ctx, job_id: str) -> None:
                     "status": "failed",
                     "error": exc.to_body().model_dump(mode="json"),
                 },
+                allow_private=_webhook_private_allowed(ctx),
             )
             await _set_status(job_id, webhook_status=code)
     except Exception as exc:

@@ -10,6 +10,7 @@ const en = {
   },
   common: {
     loading: 'Loading…',
+    loadFailed: 'Could not load this page',
     error: 'Something went wrong',
     retry: 'Retry',
     cancel: 'Cancel',
@@ -66,6 +67,7 @@ const en = {
     showFreq: 'Waveform',
   },
   compare: {
+    resultsLabel: 'Comparison results, scrollable',
     title: 'Compare',
     subtitle: 'Send one text to several voices at once and listen side by side.',
     addTarget: 'Add target',
@@ -85,6 +87,7 @@ const en = {
     title: 'Voices',
     subtitle: 'Every voice from every enabled provider.',
     searchPlaceholder: 'Search by name, id or language…',
+    moreHidden: '{{count}} more — refine your search',
     language: 'Language',
     gender: 'Gender',
     freeOnly: 'Free only',

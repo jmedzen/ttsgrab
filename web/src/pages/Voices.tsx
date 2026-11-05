@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import QueryError from '../components/QueryError'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, formatUsd, type Voice } from '../lib/api'
@@ -16,7 +17,7 @@ export default function Voices() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['voices', { search, language, provider, freeOnly }],
     queryFn: () =>
       api.voices({
@@ -95,60 +96,68 @@ export default function Voices() {
       </section>
 
       <p className="text-xs text-ink-500">
-        {isLoading ? t('common.loading') : t('voices.total', { count: data?.total ?? 0 })}
+        {isLoading
+          ? t('common.loading')
+          : isError
+            ? t('common.loadFailed')
+            : t('voices.total', { count: data?.total ?? 0 })}
       </p>
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {(data?.voices ?? []).map((v) => (
-          <div key={`${v.provider}-${v.voice_id}`} className="card flex flex-col gap-1.5 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium" title={v.name}>
-                  {v.name}
-                </div>
-                <div className="truncate font-mono text-[11px] text-ink-500">{v.voice_id}</div>
-              </div>
-              <button
-                type="button"
-                className="btn-ghost shrink-0 px-2 py-1 text-xs"
-                onClick={() => preview(v)}
-                disabled={previewing === v.voice_id}
-              >
-                {previewing === v.voice_id ? '…' : '▶'}
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
-                {v.provider}
-              </span>
-              <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
-                {v.languages.slice(0, 2).join(' / ')}
-              </span>
-              {v.gender !== 'unknown' && (
-                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
-                  {v.gender}
-                </span>
-              )}
-              {v.cost_class === 'free' ? (
-                <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
-                  {t('common.free')}
-                </span>
-              ) : (
-                <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                  {formatUsd(v.price_usd_per_mchar * 1_000_000)}/1M
-                </span>
-              )}
-              {v.cloning && (
-                <span className="badge bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400">
-                  clone
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      {isError && <QueryError error={error} onRetry={() => void refetch()} className="mb-3" />}
 
-      {!isLoading && (data?.voices ?? []).length === 0 && (
+      {!isError && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {(data?.voices ?? []).map((v) => (
+            <div key={`${v.provider}-${v.voice_id}`} className="card flex flex-col gap-1.5 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium" title={v.name}>
+                    {v.name}
+                  </div>
+                  <div className="truncate font-mono text-[11px] text-ink-500">{v.voice_id}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost shrink-0 px-2 py-1 text-xs"
+                  onClick={() => preview(v)}
+                  disabled={previewing === v.voice_id}
+                >
+                  {previewing === v.voice_id ? '…' : '▶'}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                  {v.provider}
+                </span>
+                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                  {v.languages.slice(0, 2).join(' / ')}
+                </span>
+                {v.gender !== 'unknown' && (
+                  <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                    {v.gender}
+                  </span>
+                )}
+                {v.cost_class === 'free' ? (
+                  <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                    {t('common.free')}
+                  </span>
+                ) : (
+                  <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    {formatUsd(v.price_usd_per_mchar * 1_000_000)}/1M
+                  </span>
+                )}
+                {v.cloning && (
+                  <span className="badge bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400">
+                    clone
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && !isError && (data?.voices ?? []).length === 0 && (
         <p className="py-12 text-center text-sm text-ink-500">{t('voices.empty')}</p>
       )}
     </div>

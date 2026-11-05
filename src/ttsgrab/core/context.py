@@ -16,6 +16,7 @@ from ttsgrab.core.cache import DiskCache
 from ttsgrab.core.pricing import PricingTable
 from ttsgrab.core.registry import ProviderRegistry
 from ttsgrab.core.router import Orchestrator
+from ttsgrab.core.security import SlidingWindowLimiter
 from ttsgrab.core.textsplit import PronunciationDictionary
 from ttsgrab.core.usage import UsageLedger
 from ttsgrab.db.session import create_all, init_engine, session_factory
@@ -33,6 +34,10 @@ class AppContext:
     usage: UsageLedger
     orchestrator: Orchestrator
     dictionary: PronunciationDictionary
+    # A real field rather than something tucked into `extras`: two concurrent first
+    # requests would each build their own limiter and get double the allowance, and
+    # hidden state is state nobody audits.
+    limiter: SlidingWindowLimiter = field(default_factory=SlidingWindowLimiter)
     extras: dict[str, Any] = field(default_factory=dict)
 
     @property

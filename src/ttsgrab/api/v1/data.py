@@ -63,7 +63,7 @@ async def history(
 
 
 @router.get("/v1/history/{record_id}/audio", summary="Download a historical audio file")
-async def history_audio(record_id: str, ctx: Ctx) -> FileResponse:
+async def history_audio(record_id: str, ctx: Ctx, principal: PrincipalDep) -> FileResponse:
     async with session_scope() as session:
         row = await session.get(SynthRecord, record_id)
         if row is None or not row.audio_path:

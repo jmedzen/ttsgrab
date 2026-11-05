@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from ttsgrab.api.deps import Ctx, PrincipalDep, write_audit
+from ttsgrab.api.deps import AdminDep, Ctx, write_audit
 from ttsgrab.api.schemas import ApiKeyCreate
 from ttsgrab.core.errors import NotFound
 from ttsgrab.core.security import generate_api_key
@@ -32,7 +32,7 @@ def _out(row: ApiKey) -> dict[str, Any]:
 
 
 @router.get("/v1/keys", summary="List API keys (never returns the secret)")
-async def list_keys(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def list_keys(ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     async with session_scope() as session:
         rows = (
             (await session.execute(select(ApiKey).order_by(ApiKey.created_at.desc())))
@@ -43,7 +43,7 @@ async def list_keys(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
 
 
 @router.post("/v1/keys", summary="Create an API key — the token is returned only once")
-async def create_key(body: ApiKeyCreate, ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def create_key(body: ApiKeyCreate, ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     raw, key_hash, prefix = generate_api_key()
     async with session_scope() as session:
         row = ApiKey(
@@ -71,7 +71,7 @@ async def create_key(body: ApiKeyCreate, ctx: Ctx, principal: PrincipalDep) -> d
 
 
 @router.delete("/v1/keys/{key_id}", summary="Revoke an API key")
-async def revoke_key(key_id: str, ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def revoke_key(key_id: str, ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     async with session_scope() as session:
         row = await session.get(ApiKey, key_id)
         if row is None:
@@ -83,7 +83,7 @@ async def revoke_key(key_id: str, ctx: Ctx, principal: PrincipalDep) -> dict[str
 
 
 @router.get("/v1/audit", summary="Recent audit log entries")
-async def audit_log(ctx: Ctx, principal: PrincipalDep, limit: int = 100) -> dict[str, Any]:
+async def audit_log(ctx: Ctx, principal: AdminDep, limit: int = 100) -> dict[str, Any]:
     from ttsgrab.db.models import AuditLog
 
     async with session_scope() as session:

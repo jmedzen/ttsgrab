@@ -8,6 +8,7 @@ per-request decisions — but the monitor is what populates it.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 
@@ -112,5 +113,10 @@ class WorkerMonitor:
             try:
                 await asyncio.wait_for(self._task, timeout=5)
             except (TimeoutError, asyncio.CancelledError):
+                # Cancellation is a request, not a guarantee: without this await the loop
+                # may still be running against a closed event loop, which surfaces later as
+                # "Event loop is closed" in an unrelated test or on shutdown.
                 self._task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._task
             self._task = None

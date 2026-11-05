@@ -21,6 +21,18 @@ os.environ["TTSGRAB_CACHE__DIR"] = str(Path(_TMP) / "cache")
 os.environ["TTSGRAB_ENV"] = "test"
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Remove the per-run data directory.
+
+    Left behind, it accumulates a SQLite file per test forever, and the aiosqlite worker
+    threads that outlive a test surface as "Event loop is closed" noise that hides real
+    leaks.
+    """
+    import shutil
+
+    shutil.rmtree(_TMP, ignore_errors=True)
+
+
 @pytest.fixture
 def tmp_data_dir() -> Path:
     return Path(_TMP)

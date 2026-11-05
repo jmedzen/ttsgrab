@@ -20,6 +20,7 @@ class ErrorCode(enum.StrEnum):
     NOT_FOUND = "not_found"
     UNSUPPORTED_PARAM = "unsupported_param"
     TEXT_TOO_LONG = "text_too_long"
+    REQUEST_TOO_LARGE = "request_too_large"
     RATE_LIMITED = "rate_limited"
     QUOTA_EXCEEDED = "quota_exceeded"
     BUDGET_EXCEEDED = "budget_exceeded"
@@ -106,6 +107,11 @@ class InvalidRequest(GatewayError):
 class UnsupportedParam(GatewayError):
     code = ErrorCode.UNSUPPORTED_PARAM
     http_status = 422
+
+
+class RequestTooLarge(GatewayError):
+    code = ErrorCode.REQUEST_TOO_LARGE
+    http_status = 413
 
 
 class TextTooLong(GatewayError):

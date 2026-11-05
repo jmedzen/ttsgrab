@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -93,6 +94,10 @@ async def lifespan(app: FastAPI):
                 await asyncio.wait_for(mcp_task, timeout=10)
             except TimeoutError:
                 mcp_task.cancel()
+                # Await the cancellation so the task is really gone before the database
+                # engine is disposed underneath it.
+                with contextlib.suppress(asyncio.CancelledError):
+                    await mcp_task
             except Exception:
                 log.exception("MCP lifespan failed to stop cleanly")
         m = ctx.extras.get("worker_monitor")
@@ -141,6 +146,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def _observability(request: Request, call_next):
+        # Reject an oversized body before it is read. Starlette would happily buffer
+        # whatever arrives, so without this `max_request_body_bytes` is a setting that
+        # looks enforced and is not.
+        declared = request.headers.get("content-length")
+        limit = settings.security.max_request_body_bytes
+        if declared and declared.isdigit() and int(declared) > limit:
+            from ttsgrab.core.errors import RequestTooLarge
+
+            return JSONResponse(
+                status_code=413,
+                content=ErrorEnvelope(
+                    error=RequestTooLarge(
+                        f"request body is {declared} bytes; limit is {limit}",
+                        details={"limit_bytes": limit, "received_bytes": int(declared)},
+                    ).to_body(new_request_id())
+                ).model_dump(mode="json"),
+            )
+
         rid = request.headers.get("x-request-id") or new_request_id()
         request_id_var.set(rid)
         started = time.perf_counter()

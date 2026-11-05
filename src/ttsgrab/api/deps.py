@@ -23,11 +23,28 @@ def get_ctx(request: Request) -> AppContext:
 Ctx = Annotated[AppContext, Depends(get_ctx)]
 
 
-def _client_ip(request: Request) -> str:
+def _client_ip(request: Request, trusted_hops: int = 0) -> str:
+    """The caller's address, believing X-Forwarded-For only as far as configured.
+
+    A client controls its own X-Forwarded-For header, so trusting it unconditionally lets
+    anyone claim to be 127.0.0.1 — which, with allow_localhost_without_token, is admin.
+    ``trusted_proxy_hops`` says how many proxies you actually run; we then take the entry
+    that many places from the right and ignore anything the client prepended.
+    """
+    direct = request.client.host if request.client else "unknown"
+    if trusted_hops <= 0:
+        return direct
+
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    if not forwarded:
+        return direct
+    parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+    if not parts:
+        return direct
+    # The rightmost entry was written by our nearest proxy; walking left trusts exactly
+    # `trusted_hops` hops. Anything further left is attacker-controlled.
+    index = len(parts) - trusted_hops
+    return parts[index] if 0 <= index < len(parts) else parts[0]
 
 
 def _extract_token(request: Request, authorization: str | None) -> str | None:
@@ -54,7 +71,7 @@ async def get_principal(
     """
     settings = ctx.settings
     token = _extract_token(request, authorization)
-    ip = _client_ip(request)
+    ip = _client_ip(request, settings.security.trusted_proxy_hops)
 
     if token and settings.security.admin_token and _safe_eq(token, settings.security.admin_token):
         return Principal(kind="admin", name="admin")
@@ -114,7 +131,7 @@ async def require_admin(
     if token and settings.security.admin_token and _safe_eq(token, settings.security.admin_token):
         return Principal(kind="admin", name="admin")
     if not settings.security.admin_token:
-        ip = _client_ip(request)
+        ip = _client_ip(request, settings.security.trusted_proxy_hops)
         if settings.security.allow_localhost_without_token and ip in LOCAL_HOSTS:
             return Principal(kind="admin", name="localhost-admin")
         raise Forbidden("admin token required for remote access to admin endpoints")
@@ -129,13 +146,7 @@ async def check_rate_limit(ctx: Ctx, principal: Principal, bucket: str = "defaul
     limit = principal.rate_limit_per_minute or settings.security.rate_limit_per_minute
     if limit <= 0:
         return
-    limiter = ctx.extras.setdefault("_limiter", None)
-    if limiter is None:
-        from ttsgrab.core.security import SlidingWindowLimiter
-
-        limiter = SlidingWindowLimiter()
-        ctx.extras["_limiter"] = limiter
-    ok, retry_after = limiter.check(f"{principal.id or principal.name}:{bucket}", limit)
+    ok, retry_after = ctx.limiter.check(f"{principal.id or principal.name}:{bucket}", limit)
     if not ok:
         from ttsgrab.core.errors import RateLimited
 

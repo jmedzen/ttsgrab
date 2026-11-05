@@ -59,20 +59,33 @@ class DiskCache:
         if not self.enabled:
             return None
         blob_path, meta_path = self._paths(key)
-        if not blob_path.is_file() or not meta_path.is_file():
-            return None
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        # Cache reads sit on the hot path of every request. Stat and small reads on a local
+        # disk are microseconds, but a network-backed /data volume (NFS, EFS) is not, and a
+        # blocking read there stalls every other request in the process.
+        exists, meta = await asyncio.to_thread(self._read_meta, blob_path, meta_path)
+        if not exists or meta is None:
             return None
         if self.ttl_seconds and time.time() - meta.get("created_at", 0) > self.ttl_seconds:
             await self.delete(key)
             return None
         # Touch for LRU.
         now = time.time()
-        with contextlib.suppress(OSError):
-            os.utime(blob_path, (now, now))
+        await asyncio.to_thread(self._touch, blob_path, now)
         return CacheEntry(path=blob_path, meta=meta)
+
+    @staticmethod
+    def _read_meta(blob_path: Path, meta_path: Path) -> tuple[bool, dict[str, Any] | None]:
+        if not blob_path.is_file() or not meta_path.is_file():
+            return False, None
+        try:
+            return True, json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return True, None
+
+    @staticmethod
+    def _touch(path: Path, now: float) -> None:
+        with contextlib.suppress(OSError):
+            os.utime(path, (now, now))
 
     async def put(
         self,

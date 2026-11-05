@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
-from ttsgrab.api.deps import Ctx, PrincipalDep, write_audit
+from ttsgrab.api.deps import AdminDep, Ctx, PrincipalDep, write_audit
 from ttsgrab.api.schemas import ProviderOut, VoiceOut
 from ttsgrab.core.errors import InvalidRequest, NotFound
 from ttsgrab.core.obs import PROVIDER_UP
@@ -123,7 +123,7 @@ async def list_providers(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
     "/v1/providers/{name}/refresh",
     summary="Re-fetch a provider's voice list without restarting",
 )
-async def refresh_provider(name: str, ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def refresh_provider(name: str, ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     """Most common use: credentials were added after boot.
 
     Providers are built once at startup, so a key added later is invisible until the
