@@ -19,7 +19,7 @@ RUN npm run build
 FROM python:3.11.10-slim-bookworm AS wheels
 WORKDIR /build
 RUN pip install --no-cache-dir --upgrade pip build
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md pricing.yaml ./
 COPY src/ ./src/
 # Build a wheel so the runtime stage needs no compiler.
 RUN python -m build --wheel --outdir /dist
