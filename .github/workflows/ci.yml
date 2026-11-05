@@ -50,19 +50,23 @@ jobs:
           enable-cache: true
       - name: Install ffmpeg
         # apt has hung on the runner's mirror for 20+ minutes, twice, on one matrix leg
-        # while the other passed. A bounded retry turns an opaque stall into a fast failure.
-        timeout-minutes: 5
+        # while the other passed.
+        #
+        # The step timeout alone was not enough: it bounded the *whole* retry loop, so a
+        # stall on attempt 1 consumed the budget and the retries never ran. Each attempt is
+        # now bounded individually, and the step budget exceeds the sum of them.
+        timeout-minutes: 12
         run: |
           for attempt in 1 2 3; do
-            if sudo apt-get update -o Acquire::Retries=3 \
-               && sudo apt-get install -y --no-install-recommends ffmpeg; then
+            if timeout 180 sudo apt-get update -o Acquire::Retries=1 \
+               && timeout 240 sudo apt-get install -y --no-install-recommends ffmpeg; then
               ffmpeg -version | head -1
               exit 0
             fi
-            echo "apt attempt $attempt failed; retrying in 10s" >&2
+            echo "apt attempt $attempt failed or timed out; retrying in 10s" >&2
             sleep 10
           done
-          echo "apt-get could not install ffmpeg after 3 attempts" >&2
+          echo "apt-get could not install ffmpeg after 3 bounded attempts" >&2
           exit 1
       - name: Create venv
         run: uv venv --python ${{ matrix.python }}
@@ -110,19 +114,23 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install ffmpeg
         # apt has hung on the runner's mirror for 20+ minutes, twice, on one matrix leg
-        # while the other passed. A bounded retry turns an opaque stall into a fast failure.
-        timeout-minutes: 5
+        # while the other passed.
+        #
+        # The step timeout alone was not enough: it bounded the *whole* retry loop, so a
+        # stall on attempt 1 consumed the budget and the retries never ran. Each attempt is
+        # now bounded individually, and the step budget exceeds the sum of them.
+        timeout-minutes: 12
         run: |
           for attempt in 1 2 3; do
-            if sudo apt-get update -o Acquire::Retries=3 \
-               && sudo apt-get install -y --no-install-recommends ffmpeg; then
+            if timeout 180 sudo apt-get update -o Acquire::Retries=1 \
+               && timeout 240 sudo apt-get install -y --no-install-recommends ffmpeg; then
               ffmpeg -version | head -1
               exit 0
             fi
-            echo "apt attempt $attempt failed; retrying in 10s" >&2
+            echo "apt attempt $attempt failed or timed out; retrying in 10s" >&2
             sleep 10
           done
-          echo "apt-get could not install ffmpeg after 3 attempts" >&2
+          echo "apt-get could not install ffmpeg after 3 bounded attempts" >&2
           exit 1
       - name: Install python deps
         run: uv venv --python 3.12 && uv pip install -e ".[dev,mcp]"
