@@ -49,34 +49,44 @@ jobs:
         with:
           enable-cache: true
       - name: Install ffmpeg
-        # apt has hung on the runner's mirror for 20+ minutes, twice, on one matrix leg
-        # while the other passed. Two lessons from that:
+        # Three failed strategies before this one, in order of what they taught:
         #
-        # 1. The cheapest way to survive a broken apt mirror is not to need apt. If ffmpeg is
-        #    already on the image, use it and never touch the network.
-        # 2. A step timeout bounds the *whole* retry loop, so a stall on attempt 1 used to
-        #    consume the budget and the retries never ran — a retry that cannot happen reads
-        #    as handled. Each attempt now has its own bound, and the budget (18 min) is above
-        #    the worst case of the loop that follows (16.3 min).
-        timeout-minutes: 18
+        # 1. `apt-get install ffmpeg` with no bound: hung 20+ minutes on a slow mirror.
+        # 2. Retries: the step timeout bounded the whole loop, so attempt 1 ate the budget
+        #    and the retries never ran. A retry that cannot happen reads as handled.
+        # 3. Bounded attempts of 90s: this is the one that actually failed in CI, and the
+        #    log says why — the runner was pulling 63 MB of libav* at ~70 KB/s. At that
+        #    rate ffmpeg needs ~15 minutes. No short bound can succeed; the bound was
+        #    fighting the network, not a hang.
+        #
+        # So: skip apt entirely. A static build is one ~20 MB file on a CDN, needs no
+        # dependencies, and is a fraction of what apt drags in (libavcodec, libavformat,
+        # libavfilter, libswscale, libzvbi, ... at 63 MB).
+        timeout-minutes: 6
         run: |
           if ffmpeg -version >/dev/null 2>&1; then
             echo "ffmpeg already present:"; ffmpeg -version | head -1
             exit 0
           fi
-          # First attempt is generous (a slow-but-working mirror should succeed); the
-          # retries are short, because what we are retrying is a fast failure.
-          for bounds in "240 420" "60 90" "60 90"; do
-            set -- $bounds
-            if timeout "$1" sudo apt-get update -o Acquire::Retries=1 \
-               && timeout "$2" sudo apt-get install -y --no-install-recommends ffmpeg; then
-              ffmpeg -version | head -1
-              exit 0
+          url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+          for attempt in 1 2 3; do
+            echo "downloading static ffmpeg (attempt $attempt)"
+            if curl -fsSL --max-time 240 -o /tmp/ffmpeg.tar.xz "$url"; then
+              mkdir -p /tmp/ffmpeg-static
+              # --no-same-owner: the archive is not ours to chown, and as a non-root extract
+              # that would otherwise fail noisily.
+              if tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-static --no-same-owner --strip-components=1 2>/dev/null \
+                 || tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-static --strip-components=1; then
+                sudo install -m 0755 /tmp/ffmpeg-static/ffmpeg /usr/local/bin/ffmpeg
+                sudo install -m 0755 /tmp/ffmpeg-static/ffprobe /usr/local/bin/ffprobe
+                ffmpeg -version | head -1
+                exit 0
+              fi
             fi
-            echo "apt attempt ($1s/$2s) failed or timed out; retrying in 10s" >&2
-            sleep 10
+            echo "attempt $attempt failed; retrying in 5s" >&2
+            sleep 5
           done
-          echo "could not obtain ffmpeg after 3 bounded attempts" >&2
+          echo "could not obtain ffmpeg" >&2
           exit 1
       - name: Create venv
         run: uv venv --python ${{ matrix.python }}
@@ -123,34 +133,44 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install ffmpeg
-        # apt has hung on the runner's mirror for 20+ minutes, twice, on one matrix leg
-        # while the other passed. Two lessons from that:
+        # Three failed strategies before this one, in order of what they taught:
         #
-        # 1. The cheapest way to survive a broken apt mirror is not to need apt. If ffmpeg is
-        #    already on the image, use it and never touch the network.
-        # 2. A step timeout bounds the *whole* retry loop, so a stall on attempt 1 used to
-        #    consume the budget and the retries never ran — a retry that cannot happen reads
-        #    as handled. Each attempt now has its own bound, and the budget (18 min) is above
-        #    the worst case of the loop that follows (16.3 min).
-        timeout-minutes: 18
+        # 1. `apt-get install ffmpeg` with no bound: hung 20+ minutes on a slow mirror.
+        # 2. Retries: the step timeout bounded the whole loop, so attempt 1 ate the budget
+        #    and the retries never ran. A retry that cannot happen reads as handled.
+        # 3. Bounded attempts of 90s: this is the one that actually failed in CI, and the
+        #    log says why — the runner was pulling 63 MB of libav* at ~70 KB/s. At that
+        #    rate ffmpeg needs ~15 minutes. No short bound can succeed; the bound was
+        #    fighting the network, not a hang.
+        #
+        # So: skip apt entirely. A static build is one ~20 MB file on a CDN, needs no
+        # dependencies, and is a fraction of what apt drags in (libavcodec, libavformat,
+        # libavfilter, libswscale, libzvbi, ... at 63 MB).
+        timeout-minutes: 6
         run: |
           if ffmpeg -version >/dev/null 2>&1; then
             echo "ffmpeg already present:"; ffmpeg -version | head -1
             exit 0
           fi
-          # First attempt is generous (a slow-but-working mirror should succeed); the
-          # retries are short, because what we are retrying is a fast failure.
-          for bounds in "240 420" "60 90" "60 90"; do
-            set -- $bounds
-            if timeout "$1" sudo apt-get update -o Acquire::Retries=1 \
-               && timeout "$2" sudo apt-get install -y --no-install-recommends ffmpeg; then
-              ffmpeg -version | head -1
-              exit 0
+          url="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+          for attempt in 1 2 3; do
+            echo "downloading static ffmpeg (attempt $attempt)"
+            if curl -fsSL --max-time 240 -o /tmp/ffmpeg.tar.xz "$url"; then
+              mkdir -p /tmp/ffmpeg-static
+              # --no-same-owner: the archive is not ours to chown, and as a non-root extract
+              # that would otherwise fail noisily.
+              if tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-static --no-same-owner --strip-components=1 2>/dev/null \
+                 || tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-static --strip-components=1; then
+                sudo install -m 0755 /tmp/ffmpeg-static/ffmpeg /usr/local/bin/ffmpeg
+                sudo install -m 0755 /tmp/ffmpeg-static/ffprobe /usr/local/bin/ffprobe
+                ffmpeg -version | head -1
+                exit 0
+              fi
             fi
-            echo "apt attempt ($1s/$2s) failed or timed out; retrying in 10s" >&2
-            sleep 10
+            echo "attempt $attempt failed; retrying in 5s" >&2
+            sleep 5
           done
-          echo "could not obtain ffmpeg after 3 bounded attempts" >&2
+          echo "could not obtain ffmpeg" >&2
           exit 1
       - name: Install python deps
         run: uv venv --python 3.12 && uv pip install -e ".[dev,mcp]"
