@@ -34,7 +34,10 @@ def _free_port() -> int:
 async def live_server(app):
     """Run the real app on a real socket, because streaming is a transport property."""
     port = _free_port()
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    # lifespan="off": the `app` fixture has already run startup, and running it twice
+    # rebuilds the registry and then disposes the shared database engine on the way out —
+    # which closes the aiosqlite connection out from under the rest of the session.
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="off")
     server = uvicorn.Server(config)
     task = asyncio.create_task(server.serve())
     try:
@@ -80,9 +83,7 @@ async def _timed_stream(base_url: str, payload: dict) -> tuple[float, float, int
 async def test_stream_delivers_first_bytes_before_the_last_sentence(app, ctx) -> None:
     provider = _make_slow(ctx, latency_s=0.3)
     async with live_server(app) as base:
-        # uvicorn runs the lifespan again: it rebuilds the registry *and* replaces
-        # app.state.ctx. Install into the live context, not the fixture's stale one.
-        install(app.state.ctx, provider)
+        install(ctx, provider)
         first, finished, total = await _timed_stream(
             base,
             {
@@ -105,7 +106,7 @@ async def test_stream_window_limits_work_started_before_first_byte(app, ctx) -> 
     provider before the caller hears anything."""
     provider = _make_slow(ctx, latency_s=0.15)
     async with live_server(app) as base:
-        install(app.state.ctx, provider)
+        install(ctx, provider)
         async with (
             httpx.AsyncClient(timeout=120) as client,
             client.stream(
@@ -131,7 +132,7 @@ async def test_stream_window_limits_work_started_before_first_byte(app, ctx) -> 
 async def test_sse_mode_emits_chunk_and_done_events(app, ctx) -> None:
     provider = _make_slow(ctx, latency_s=0.02)
     async with live_server(app) as base:
-        install(app.state.ctx, provider)
+        install(ctx, provider)
         async with (
             httpx.AsyncClient(timeout=120) as client,
             client.stream(
@@ -154,7 +155,7 @@ async def test_stream_headers_forbid_proxy_buffering(app, ctx) -> None:
     """Without X-Accel-Buffering a reverse proxy silently undoes the streaming."""
     provider = _make_slow(ctx, latency_s=0.01)
     async with live_server(app) as base:
-        install(app.state.ctx, provider)
+        install(ctx, provider)
         async with (
             httpx.AsyncClient(timeout=60) as client,
             client.stream(

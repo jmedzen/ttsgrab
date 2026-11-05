@@ -17,7 +17,7 @@ working" true rather than aspirational.
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -116,6 +116,22 @@ class WorkerClient:
         return resp.content, resp.headers.get("content-type")
 
 
+def _normalise_gender(value: object) -> Literal["male", "female", "neutral", "unknown"]:
+    """Map a worker's spelling onto the vocabulary the catalogue understands."""
+    text = str(value or "unknown").strip().lower()
+    if text in {"m", "man", "masculine"}:
+        return "male"
+    if text in {"f", "woman", "feminine"}:
+        return "female"
+    if text == "male":
+        return "male"
+    if text == "female":
+        return "female"
+    if text == "neutral":
+        return "neutral"
+    return "unknown"
+
+
 class WorkerProvider(TTSProvider):
     """Adapts one worker node into a provider."""
 
@@ -188,7 +204,10 @@ class WorkerProvider(TTSProvider):
                     voice_id=str(vid),
                     name=str(item.get("name", vid)),
                     languages=list(item.get("languages") or item.get("language") or ["zh-TW"]),
-                    gender=item.get("gender", "unknown"),
+                    # A worker that says "Female" instead of "female" must not take the
+                    # whole provider offline: the voice list is one validation error away
+                    # from empty, and an empty catalogue silently drops the worker.
+                    gender=_normalise_gender(item.get("gender")),
                     styles=list(item.get("styles") or []),
                     cost_class=CostClass.FREE,
                     tier="local",
