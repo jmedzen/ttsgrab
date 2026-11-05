@@ -193,7 +193,7 @@ Look at `healthy`, `last_error`, `latency_ms_ewma`.
    `my-gpu-box` will never match `local_only`. Name it after the model.
 3. **The voice does not exist on it.** Routing only considers providers that actually have
    the requested `voice_id`.
-4. **Circuit breaker open.** It stays open for `router.circuit_cooldown_s` after failures,
+4. **Circuit breaker open.** It stays open for `router.circuit_breaker_cooldown_s` after failures,
    then half-opens with one probe request. Force a check:
    ```bash
    curl -X POST localhost:8000/v1/workers/{id}/check -H "Authorization: Bearer $TOKEN"

@@ -102,3 +102,58 @@ def test_config_example_keys_are_documented_in_deployment() -> None:
     deployment = (REPO_ROOT / "docs" / "deployment.md").read_text(encoding="utf-8")
     for knob in ("monthly_budget_micro_usd", "circuit_breaker_threshold", "ttl_seconds"):
         assert knob in deployment, f"{knob} is not mentioned in docs/deployment.md"
+
+
+def test_docs_do_not_invent_settings_names() -> None:
+    """Every dotted setting named in the docs must exist.
+
+    This has gone wrong repeatedly — `router.circuit_cooldown_s`,
+    `security.max_text_chars` at the wrong default, `TTSGRAB_ALLOW_LOCALHOST` — and a
+    reader who copies a setting name that does not exist gets silence, not an error.
+    """
+    from pydantic import BaseModel
+
+    from ttsgrab.settings import Settings
+
+    def field_names(model: type[BaseModel], prefix: str = "") -> set[str]:
+        names: set[str] = set()
+        for field, info in model.model_fields.items():
+            path = f"{prefix}{field}"
+            names.add(path)
+            annotation = info.annotation
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                names |= field_names(annotation, path + ".")
+        return names
+
+    known = field_names(Settings)
+    # Fields on sections that are plain dicts/lists rather than models still count by leaf.
+    leaves = {name.rsplit(".", 1)[-1] for name in known}
+
+    pattern = re.compile(r"`((?:[a-z_]+\.){1,3}[a-z_]+)`")
+    offenders: list[str] = []
+    for doc in [REPO_ROOT / "README.md", *(REPO_ROOT / "docs").glob("*.md")]:
+        text = doc.read_text(encoding="utf-8")
+        for match in pattern.finditer(text):
+            name = match.group(1)
+            # Skip filenames, module paths and anything not settings-shaped.
+            if name.endswith((".md", ".py", ".yaml", ".yml", ".json", ".sh")):
+                continue
+            if name.startswith(("ttsgrab.", "src.", "tests.", "workers.")):
+                continue
+            if name.split(".")[0] not in {
+                "router",
+                "cache",
+                "security",
+                "longform",
+                "workers",
+                "edge",
+                "google_cloud",
+                "gemini",
+                "azure",
+                "free_web",
+                "mcp",
+            }:
+                continue
+            if name not in known and name.rsplit(".", 1)[-1] not in leaves:
+                offenders.append(f"{doc.name}: {name}")
+    assert offenders == [], f"docs name settings that do not exist: {offenders}"
