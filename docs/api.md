@@ -243,6 +243,68 @@ curl 'localhost:8000/v1/voices?language=zh-TW&free_only=true&q=hsiao&limit=10'
 the first health check. `official: false` marks an unofficial interface; `stability:
 fragile` means it has broken before and will again.
 
+## `POST /v1/providers/{name}/refresh`
+
+Re-fetches a provider's voice list. Useful after enabling a provider, or when a stale
+catalogue is hiding a voice you know exists.
+
+```bash
+curl -X POST localhost:8000/v1/providers/edge/refresh -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{"name": "edge", "enabled": true, "reason": null, "voices": 322, "reloaded": true}
+```
+
+An unreachable upstream is reported as an error and the **previously loaded** adapter stays
+in use, so a failed refresh never leaves you with zero voices. Refreshing a provider that is
+disabled returns `voices: 0` and `reloaded: false` rather than pretending to succeed.
+
+---
+
+## `GET /v1/capabilities`
+
+What this deployment can actually do right now — read it instead of hard-coding assumptions.
+
+```json
+{
+  "formats": ["mp3", "wav", "opus", "flac"],
+  "sample_rates": [8000, 16000, 22050, 24000, 44100, 48000],
+  "policies": ["cheapest", "fastest", "best_quality", "local_only", "free_only"],
+  "max_text_chars": 20000,
+  "streaming": true,
+  "cloning": true,
+  "providers": ["edge"]
+}
+```
+
+## `GET /v1/models`
+
+OpenAI-shaped model list, so a stock OpenAI client that probes for models does not fail.
+The entries are aliases for voices, not real model ids.
+
+```json
+{"object": "list", "data": [{"id": "tts-1", "object": "model", "owned_by": "ttsgrab"}]}
+```
+
+---
+
+## Operations
+
+Unauthenticated by design: these are what a container orchestrator and a Prometheus scrape
+need.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /healthz` | Liveness. Returns 200 as soon as the process can answer. |
+| `GET /readyz` | Readiness. Checks the database and that at least one provider loaded. 503 while starting. |
+| `GET /metrics` | Prometheus text format: request counts, latency histograms, cache hits, provider up/down. |
+
+```json
+{"status": "ready", "checks": {"database": "ok", "providers": "ok",
+ "providers_enabled": ["edge"], "voices": 322}}
+```
+
 ---
 
 ## `POST /v1/compare`
@@ -314,7 +376,7 @@ curl -X POST localhost:8000/v1/jobs -H 'Content-Type: application/json' -d '{
 {"id": "a1b2…", "status": "queued", "progress": 0.0, "result": null, "error": null}
 ```
 
-Poll `GET /v1/jobs/{id}`; `status` moves `queued` → `running` → `succeeded` | `failed`.
+Poll `GET /v1/jobs/{job_id}`; `status` moves `queued` → `running` → `succeeded` | `failed`.
 On completion the webhook receives:
 
 ```json
@@ -354,8 +416,8 @@ you got instead of lying.
 | Endpoint | Returns |
 |---|---|
 | `GET /v1/history?q=&limit=&offset=` | Past syntheses: text, params, provider, latency, characters, cost, audio URL |
-| `GET /v1/history/{id}/audio` | The audio, as stored |
-| `DELETE /v1/history/{id}` | Removes the row and the file |
+| `GET /v1/history/{record_id}/audio` | The audio, as stored |
+| `DELETE /v1/history/{record_id}` | Removes the row and the file |
 | `GET /v1/usage?days=30` | Month totals, per-provider breakdown, free-tier status, budget status |
 | `GET /v1/usage/series?days=30` | `[{date, characters, requests, cost_micro_usd}]` |
 | `GET /v1/usage/free-tier` | Remaining free characters per provider/tier |
@@ -372,10 +434,10 @@ curl -X POST localhost:8000/v1/workers -H 'Authorization: Bearer '$TOKEN \
   -d '{"name":"gpu-box","base_url":"http://192.168.1.42:8880","kind":"tts"}'
 
 # check now, rather than waiting for the monitor
-curl -X POST localhost:8000/v1/workers/{id}/check -H 'Authorization: Bearer '$TOKEN
+curl -X POST localhost:8000/v1/workers/{worker_id}/check -H 'Authorization: Bearer '$TOKEN
 
 # remove
-curl -X DELETE localhost:8000/v1/workers/{id} -H 'Authorization: Bearer '$TOKEN
+curl -X DELETE localhost:8000/v1/workers/{worker_id} -H 'Authorization: Bearer '$TOKEN
 ```
 
 `base_url` is SSRF-checked: only `http`/`https`, link-local and cloud-metadata addresses
@@ -425,7 +487,7 @@ curl -X POST localhost:8000/v1/keys -H 'Authorization: Bearer '$TOKEN \
 ```
 
 **The `token` is returned once and never again** — only its SHA-256 is stored. Revoke with
-`DELETE /v1/keys/{id}`. `GET /v1/audit` shows who did what.
+`DELETE /v1/keys/{key_id}`. `GET /v1/audit` shows who did what.
 
 ---
 

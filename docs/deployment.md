@@ -220,19 +220,58 @@ tts.example.com {
 
 ### Hardening before you expose it
 
-1. **Set `TTSGRAB_ADMIN_TOKEN`.** Without it, and with
-   `allow_localhost_without_token: true`, a request from behind the proxy may be treated as
-   local. Set both:
+1. **Set an admin token, and stop trusting the loopback address.** Behind a reverse proxy
+   every request appears to come from 127.0.0.1, so `allow_localhost_without_token: true`
+   turns your authentication off entirely:
    ```bash
-   TTSGRAB_ADMIN_TOKEN=$(openssl rand -hex 32)
-   TTSGRAB_ALLOW_LOCALHOST=false
+   TTSGRAB_SECURITY__ADMIN_TOKEN=$(openssl rand -hex 32)
+   TTSGRAB_SECURITY__ALLOW_LOCALHOST_WITHOUT_TOKEN=false
    ```
-   and make sure your proxy sets `X-Forwarded-For`.
-2. Set a budget: `TTSGRAB_MONTHLY_BUDGET_USD=5`.
-3. Keep `security.max_text_chars` modest (default 8000).
-4. Create scoped API keys per caller instead of handing out the admin token.
-5. `security.allowed_worker_hosts` — pin the workers if you do not want anything else
-   registrable.
+   Make sure the proxy sets `X-Forwarded-For`, or rate limiting will see one client.
+
+2. **Set budgets per provider, in integer micro-USD.** There is no global dollar cap
+   because "spend up to $3 on Google but nothing on Gemini" is not expressible as one
+   number. The fields are `google_cloud.monthly_budget_micro_usd` and
+   `gemini.monthly_budget_micro_usd`:
+   ```bash
+   TTSGRAB_GOOGLE_CLOUD__MONTHLY_BUDGET_MICRO_USD=3000000   # $3.00
+   TTSGRAB_GEMINI__MONTHLY_BUDGET_MICRO_USD=1000000         # $1.00
+   ```
+   Crossing one returns `402 budget_exceeded` and the request is **not** sent upstream.
+   Verify the number you set actually parsed — a typo is a startup error, not a silent
+   no-op, but check `GET /v1/usage` once anyway and confirm `budget.status` shows a limit.
+
+3. **Keep `security.max_text_chars` modest** (default 20 000). Longer input holds a
+   connection open and, on a paid provider, commits you to the whole cost before you see
+   any audio.
+
+4. **Create scoped API keys per caller** instead of handing out the admin token. A key can
+   carry a provider allowlist, a rate limit, and a monthly character quota — the admin token
+   carries none of those.
+
+5. **Pin the workers** with `security.allowed_worker_hosts` if you do not want anything
+   else on the network registrable.
+
+6. **Set `cache.ttl_seconds` deliberately.** The default is 30 days. On a paid provider a
+   long TTL is free money; on a cloning workflow it means a re-recorded reference will not
+   be heard until the entry expires.
+
+7. **Tune the circuit breaker to your providers.** `router.circuit_breaker_threshold` is how
+   many consecutive failures take a provider out of rotation, and
+   `router.circuit_breaker_cooldown_s` is how long it stays out.
+
+   | Setting | For a fragile free provider | For a paid one you are watching |
+   |---|---|---|
+   | `circuit_breaker_threshold` | 2 | 5 |
+   | `circuit_breaker_cooldown_s` | 30 | 120 |
+
+   Too low and one bad minute takes out a provider that was fine. Too high and every request
+   pays the timeout before falling back. The default of 3 failures / 60 s is a compromise,
+   not a measurement.
+
+8. **`router.request_timeout_s`** (default 60) must exceed the slowest thing you will ask
+   for. A 20 000-character request on a cold local model can exceed it; that is what
+   `/v1/jobs` is for.
 
 ---
 
