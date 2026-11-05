@@ -157,3 +157,48 @@ def test_docs_do_not_invent_settings_names() -> None:
             if name not in known and name.rsplit(".", 1)[-1] not in leaves:
                 offenders.append(f"{doc.name}: {name}")
     assert offenders == [], f"docs name settings that do not exist: {offenders}"
+
+
+# Routes that need the admin token. A curl example for any of these that omits
+# `Authorization` is worse than no example: the reader follows it, gets 401, and concludes
+# the feature is broken. This drifted once already when worker registration was tightened.
+_ADMIN_ROUTES = (
+    "/v1/keys",
+    "/v1/workers",
+    "/v1/references",
+    "/v1/audit",
+)
+
+
+def _doc_files() -> list[Path]:
+    files = [REPO_ROOT / "README.md", REPO_ROOT / "AGENTS.md"]
+    files.extend(sorted((REPO_ROOT / "docs").glob("*.md")))
+    files.extend(sorted((REPO_ROOT / "workers").glob("*.md")))
+    return [f for f in files if f.exists()]
+
+
+def test_admin_curl_examples_carry_authorization() -> None:
+    """Every documented call to an admin route must show the header it requires."""
+    offenders: list[str] = []
+    for path in _doc_files():
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "curl" not in line:
+                continue
+            route = next((r for r in _ADMIN_ROUTES if r in line), None)
+            if route is None:
+                continue
+            # Exempt the audit report, which quotes the vulnerable code as history.
+            if path.name == "audit.md":
+                continue
+            # The header may be on the same line (single-line example) ...
+            if "Authorization" in line:
+                continue
+            # ... or on a continuation line of the same ```bash block.
+            lines = path.read_text(encoding="utf-8").splitlines()
+            window = "\n".join(lines[lineno - 1 : lineno + 4])
+            if "Authorization" not in window:
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno} {route}")
+
+    assert offenders == [], (
+        "documented admin calls without an Authorization header:\n  " + "\n  ".join(offenders)
+    )

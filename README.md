@@ -358,7 +358,7 @@ context has no `.git`.
 ## Verifying it works
 
 ```bash
-make test                                  # pytest: 264 tests, ~78% statement coverage
+make test                                  # pytest: 276 tests, ~76% statement coverage
 make test-e2e                              # Playwright: real synthesis in the browser
 ./scripts/smoke.sh http://127.0.0.1:8000   # the acceptance checklist, live
 ```

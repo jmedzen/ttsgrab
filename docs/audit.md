@@ -125,6 +125,10 @@ Stated so nobody assumes more than was done.
   with real credentials. Acceptance criterion #2 remains unverified.
 - **The `gpu` and `cpu-local` compose profiles have never been started.** No GPU worker has
   loaded a model. The Docker image is CI-tested; the multi-container topology is not.
+  Mitigated, not solved: the worker *protocol* now has integration tests against a real ASGI
+  app (`tests/integration/test_worker_protocol.py`) covering single-flight model loading,
+  the concurrency cap, cloning-without-reference, base64 validation and error mapping — so
+  what remains unverified is the container topology and the model weights, not the contract.
 - **Docker is unavailable on the development machine**, so compose is validated only through
   CI and by reading it.
 - **The API key is compared with a plain sha256 lookup, not a slow hash.** Correct for
@@ -135,5 +139,6 @@ Stated so nobody assumes more than was done.
 - **No CSRF protection** — unnecessary while auth is a bearer header, but the UI also stores
   its admin token in `localStorage`, which is readable by any XSS. CSP is set; a token in
   memory would be better.
-- Coverage is ~78%. The weakest areas are the worker client (47%) and async jobs (55%);
-  both are now covered where they touch security, less so where they touch happy paths.
+- Coverage is ~76% (now measured across `workers/` too, which pulls the figure down: the
+  model wrappers are imports-around-torch and cannot run without a GPU). The weakest areas
+  are the worker *client* and the model wrappers themselves.
