@@ -104,6 +104,11 @@ def test_wheel_builds_when_build_info_is_absent(tmp_path) -> None:
     import sys
     from pathlib import Path
 
+    # The build backend is a dev tool, not a runtime dependency; a test environment that
+    # does not have it should skip rather than fail. (CI installs the package via uv, which
+    # does not leave hatchling in the venv.)
+    pytest.importorskip("hatchling", reason="build backend not installed")
+
     root = Path(__file__).resolve().parents[2]
     build_file = root / "src" / "ttsgrab" / "build_info.json"
     stash = tmp_path / "build_info.json"

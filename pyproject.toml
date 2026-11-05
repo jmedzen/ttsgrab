@@ -35,6 +35,9 @@ dev = [
     "ruff>=0.8,<1.0",
     "mypy>=1.13,<2.0",
     "types-pyyaml>=6.0",
+    # Needed so the wheel-build test actually runs in CI instead of skipping: it guards a
+    # mistake that broke every build once (a force-include on a generated, untracked file).
+    "hatchling>=1.27,<2.0",
 ]
 
 [project.scripts]
