@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from tests.fakes import FakeBehaviour, FakeProvider, install
+from ttsgrab.core.types import CostClass
 
 
 def a_fake(ctx, **kw) -> FakeProvider:
@@ -472,3 +473,80 @@ async def test_request_id_present_on_errors(client, ctx) -> None:
     r = await client.post("/v1/tts", json={"text": "x", "voice": "nope"})
     if r.status_code >= 400:
         assert r.json()["error"]["request_id"]
+
+
+@pytest.mark.asyncio
+async def test_fallback_into_an_over_budget_provider_is_refused(client, ctx) -> None:
+    """A budget must not be escapable by falling back.
+
+    The dangerous shape: the first provider fails, the router moves to an expensive one,
+    and the cap was only ever evaluated against the provider that was *requested*.
+    """
+    from ttsgrab.db.session import session_scope
+
+    # The generic check reads `monthly_budget_chars` off the config section named after the
+    # provider, so a fake provider named "azure" exercises the same code path a real one does.
+    ctx.settings.azure.monthly_budget_chars = 10
+    async with session_scope() as session:
+        await ctx.usage.record(
+            session,
+            provider="azure",
+            voice_id="x",
+            tier="neural",
+            characters=100,
+            cost_micro_usd=0,
+            free_tier=True,
+            cached=False,
+            api_key_id=None,
+            job_id=None,
+        )
+
+    flaky = FakeProvider(ctx.settings, name="flaky", behaviour=FakeBehaviour(failures=99))
+    flaky._voices[0] = flaky._voices[0].model_copy(update={"voice_id": "shared-voice"})
+    paid = FakeProvider(ctx.settings, name="azure", cost_class=CostClass.FREE_TIER)
+    paid._voices[0] = paid._voices[0].model_copy(
+        update={"voice_id": "shared-voice", "tier": "neural"}
+    )
+    install(ctx, flaky, paid)
+    # azure must be reachable as a fallback; the default chain now includes it.
+    assert "azure" in ctx.settings.router.fallback_chain
+
+    r = await client.post(
+        "/v1/tts",
+        json={
+            "text": "fallback please",
+            "voice": "shared-voice",
+            "policy": "cheapest",
+            "allow_fallback": True,
+        },
+    )
+    assert r.status_code == 402, f"expected a refusal, got {r.status_code}: {r.text}"
+    assert r.json()["error"]["code"] == "budget_exceeded"
+    assert r.json()["error"]["details"]["provider"] == "azure"
+    assert paid.calls == [], "the over-budget provider must never be called"
+
+
+@pytest.mark.asyncio
+async def test_every_provider_with_a_budget_enforces_it(ctx) -> None:
+    """Generic, not special-cased: a provider that declares a budget must honour it."""
+    from ttsgrab.core.errors import BudgetExceeded
+    from ttsgrab.db.session import session_scope
+
+    for provider in ("google_cloud", "gemini", "azure"):
+        cfg = getattr(ctx.settings, provider)
+        cfg.monthly_budget_chars = 10
+        async with session_scope() as session:
+            await ctx.usage.record(
+                session,
+                provider=provider,
+                voice_id="x",
+                tier=None,
+                characters=100,
+                cost_micro_usd=0,
+                free_tier=True,
+                cached=False,
+                api_key_id=None,
+                job_id=None,
+            )
+            with pytest.raises(BudgetExceeded):
+                await ctx.usage.check_budget(session, provider=provider, tier=None, characters=1)

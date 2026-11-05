@@ -48,6 +48,8 @@ router:
   # Tried in this order once the policy's ranking is exhausted. Providers that are
   # disabled, lack the voice, or have an open circuit breaker are skipped.
   fallback_chain: [edge, google_cloud, azure, gemini, kokoro, cosyvoice, gpt_sovits]
+  # How many extra providers to try after the first. Raise it if you have many workers and
+  # want a deeper safety net; each attempt costs latency when the situation is already bad.
   max_fallbacks: 3
   # Consecutive failures before a provider leaves rotation.
   circuit_breaker_threshold: 3

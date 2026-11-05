@@ -130,7 +130,17 @@ class RouterSettings(BaseModel):
     ] = "cheapest"
     # Ordered fallback applied after the primary choice.
     fallback_chain: list[str] = Field(
-        default_factory=lambda: ["edge", "kokoro", "gpt_sovits", "google_cloud", "gemini"]
+        # Every shippable provider, so a fallback is never skipped just because nobody
+        # remembered to list it. Unconfigured ones are simply not enabled and get skipped.
+        default_factory=lambda: [
+            "edge",
+            "google_cloud",
+            "azure",
+            "gemini",
+            "kokoro",
+            "cosyvoice",
+            "gpt_sovits",
+        ]
     )
     max_fallbacks: int = 2
     circuit_breaker_threshold: int = 5

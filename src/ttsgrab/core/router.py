@@ -231,6 +231,22 @@ class Orchestrator:
                 attempts.append({"provider": name, "ok": False, "error": "disabled"})
                 continue
             attempt_req = req.model_copy(update={"provider": name})
+
+            # Re-check the budget for the provider we are about to use, not just the one
+            # that was requested. Falling back from a free provider to a paid one must not
+            # be a way around the cap.
+            if self.usage is not None and self._db_factory is not None:
+                tier = next(
+                    (v.tier for v in provider.cached_voices if v.voice_id == req.voice_id), None
+                )
+                async with self._db_factory() as budget_session:
+                    await self.usage.check_budget(
+                        budget_session,
+                        provider=name,
+                        tier=tier,
+                        characters=len(req.text or ""),
+                    )
+
             started = time.perf_counter()
             try:
                 result = await asyncio.wait_for(

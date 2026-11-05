@@ -198,55 +198,41 @@ class UsageLedger:
         )
         summary = await self.month_summary(session, now)
 
-        if provider == "google_cloud":
-            cfg = self.settings.google_cloud
-            used_chars = summary["by_provider"].get("google_cloud", {}).get("characters", 0)
-            if cfg.monthly_budget_chars and used_chars + characters > cfg.monthly_budget_chars:
-                raise BudgetExceeded(
-                    f"google_cloud monthly character budget exhausted "
-                    f"({used_chars}/{cfg.monthly_budget_chars}); refusing to spend",
-                    details={
-                        "provider": provider,
-                        "used": used_chars,
-                        "budget": cfg.monthly_budget_chars,
-                        "requested": characters,
-                    },
-                    suggested_fallback=["edge", "kokoro", "gpt_sovits"],
-                )
-            used_usd = summary["by_provider"].get("google_cloud", {}).get("cost_micro_usd", 0)
-            if cfg.monthly_budget_micro_usd and used_usd + cost > cfg.monthly_budget_micro_usd:
-                raise BudgetExceeded(
-                    "google_cloud monthly USD budget exhausted; refusing to spend",
-                    details={
-                        "used_micro_usd": used_usd,
-                        "budget_micro_usd": cfg.monthly_budget_micro_usd,
-                        "requested_micro_usd": cost,
-                    },
-                    suggested_fallback=["edge", "kokoro", "gpt_sovits"],
-                )
-        elif provider == "gemini":
-            cfg = self.settings.gemini
-            used_chars = summary["by_provider"].get("gemini", {}).get("characters", 0)
-            if cfg.monthly_budget_chars and used_chars + characters > cfg.monthly_budget_chars:
-                raise BudgetExceeded(
-                    f"gemini monthly character budget exhausted "
-                    f"({used_chars}/{cfg.monthly_budget_chars})",
-                    details={
-                        "provider": provider,
-                        "used": used_chars,
-                        "budget": cfg.monthly_budget_chars,
-                    },
-                    suggested_fallback=["edge", "google_cloud"],
-                )
-            used_usd = summary["by_provider"].get("gemini", {}).get("cost_micro_usd", 0)
-            if cfg.monthly_budget_micro_usd and used_usd + cost > cfg.monthly_budget_micro_usd:
-                raise BudgetExceeded(
-                    "gemini monthly USD budget exhausted",
-                    details={
-                        "used_micro_usd": used_usd,
-                        "budget_micro_usd": cfg.monthly_budget_micro_usd,
-                    },
-                )
+        # One generic check, driven by whatever config section matches the provider name.
+        # The previous version special-cased google_cloud and gemini by hand, which meant
+        # azure.monthly_budget_chars was documented but never enforced — a spending cap that
+        # looked configured and did nothing.
+        cfg = getattr(self.settings, provider, None)
+        char_budget = int(getattr(cfg, "monthly_budget_chars", 0) or 0)
+        usd_budget = int(getattr(cfg, "monthly_budget_micro_usd", 0) or 0)
+        bucket = summary["by_provider"].get(provider, {})
+        used_chars = int(bucket.get("characters", 0) or 0)
+        used_usd = int(bucket.get("cost_micro_usd", 0) or 0)
+        fallbacks = [n for n in ("edge", "kokoro", "gpt_sovits") if n != provider]
+
+        if char_budget and used_chars + characters > char_budget:
+            raise BudgetExceeded(
+                f"{provider} monthly character budget exhausted "
+                f"({used_chars}/{char_budget}); refusing to spend",
+                details={
+                    "provider": provider,
+                    "used": used_chars,
+                    "budget": char_budget,
+                    "requested": characters,
+                },
+                suggested_fallback=fallbacks,
+            )
+        if usd_budget and used_usd + cost > usd_budget:
+            raise BudgetExceeded(
+                f"{provider} monthly USD budget exhausted; refusing to spend",
+                details={
+                    "provider": provider,
+                    "used_micro_usd": used_usd,
+                    "budget_micro_usd": usd_budget,
+                    "requested_micro_usd": cost,
+                },
+                suggested_fallback=fallbacks,
+            )
         return cost, free
 
     async def check_key_quota(
