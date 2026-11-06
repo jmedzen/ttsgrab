@@ -133,6 +133,8 @@ async def synthesize(
         if entry is not None:
             blob = await ctx.cache.read(entry)
             duration = await probe_duration_ms(blob, entry.format)
+            cached_tier = entry.meta.get("tier")
+            cached_segments = entry.meta.get("segments") or []
             result = SynthResult(
                 audio=blob,
                 format=entry.format,
@@ -144,9 +146,9 @@ async def synthesize(
                 used_free_tier=True,
                 latency_ms=0,
                 from_cache=True,
+                segments=[SpeechSegment(**seg) for seg in cached_segments],
                 extra={"cache_key": cache_key},
             )
-            cached_tier = entry.meta.get("tier")
             history_id = None
             if persist:
                 history_id, _p = await _persist(
@@ -398,6 +400,10 @@ async def synthesize(
                 "used_provider": result.provider,
                 "sample_rate": result.sample_rate,
                 "duration_ms": duration,
+                # Timings are produced during synthesis and cost nothing to store. Without
+                # them a cache hit answers with audio but no subtitles, so the same request
+                # returns a different shape the second time.
+                "segments": [seg.model_dump() for seg in (result.segments or [])],
                 "tier": meta.get("tier"),
             },
         )

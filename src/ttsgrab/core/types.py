@@ -116,7 +116,13 @@ class SynthRequest(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
     def cache_key(self) -> str:
-        """Hash of everything that can change the produced audio."""
+        """Hash of everything that can change the produced audio.
+
+        A key that omits a field serving two requests with different audio is worse than no
+        cache: the caller gets the *other* request's bytes and no way to tell. `loudness` was
+        omitted, so `loudness=-16` and `loudness=-23` shared an entry — the second caller
+        silently received audio normalised to the first target.
+        """
         payload = {
             "t": self.text,
             "v": self.voice_id,
@@ -131,6 +137,15 @@ class SynthRequest(BaseModel):
             "pr": self.prompt,
             "lang": self.language,
             "ref": self.reference_audio_id,
+            # Loudness is applied after synthesis, so it does not affect the provider call
+            # — which is why it was easy to leave out — but it absolutely affects the bytes
+            # we return and cache.
+            "ld": None if self.loudness is None else round(self.loudness, 2),
+            # A subtitle request splits by sentence and concatenates, which is different
+            # audio — not merely extra metadata on the same audio. Without this the plain
+            # request's single-chunk result was returned to the subtitle request, which then
+            # had no timings to render.
+            "seg": self.want_segments,
             "x": self.extra,
         }
         blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
