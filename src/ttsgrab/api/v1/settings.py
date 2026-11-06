@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from ttsgrab.api.deps import AdminDep, Ctx, PrincipalDep, write_audit
+from ttsgrab.api.deps import AdminDep, Ctx, write_audit
 from ttsgrab.core import configfile
 from ttsgrab.core.errors import InvalidRequest
 
@@ -84,7 +84,7 @@ def _env_override(dotted: str) -> str | None:
 
 
 @router.get("/v1/settings", summary="Effective configuration, with secret values masked")
-async def get_settings(ctx: Ctx, principal: PrincipalDep) -> dict[str, Any]:
+async def get_settings(ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
     settings = ctx.settings
     path = _cfg_path(settings)
     on_disk = configfile.read_raw(path)

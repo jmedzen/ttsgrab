@@ -265,7 +265,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             from ttsgrab import mcp_server
 
-            mcp_inner = mcp_server.mount(app, settings.mcp.path)
+            # MCP tools synthesise speech and read usage — they are not read-only. The SDK
+            # serves the whole tool surface behind the mount, and before this the mount had
+            # no gate of its own: an unauthenticated caller got a session and could bill the
+            # operator's provider accounts, bypassing every per-key control (rate limit,
+            # allowlist, quota) simply by not having a key.
+            #
+            # Requiring a token here is the only place that can cover every tool, including
+            # ones added to the SDK later.
+            if not (settings.mcp.token or settings.security.admin_token):
+                logging.getLogger("ttsgrab").warning(
+                    "MCP is enabled but no TTSGRAB_MCP_TOKEN or admin token is configured; "
+                    "refusing to mount it, because its tools spend money."
+                )
+                settings.mcp.enabled = False
+            else:
+                mcp_inner = mcp_server.mount(app, settings.mcp.path)
         except SystemExit:
             logging.getLogger("ttsgrab").warning(
                 "MCP is enabled in config but the `mcp` extra is not installed: "
@@ -274,7 +289,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             logging.getLogger("ttsgrab").exception("failed to mount the MCP server")
 
-    @app.api_route("/healthz", tags=["ops"], summary="Liveness", methods=["GET", "HEAD"])
+    @app.api_route(
+        "/healthz",
+        tags=["ops"],
+        summary="Liveness",
+        methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
     async def healthz() -> dict[str, Any]:
         # Kept flat and additive: existing callers read `version`, and adding `build`
         # alongside it does not break them.
@@ -453,8 +474,23 @@ def _mount_web(app: FastAPI) -> None:
             )
         ):
             return JSONResponse({"error": {"code": "not_found"}}, status_code=404)
-        candidate = dist / full_path
-        if candidate.is_file():
+        # Confine to the SPA directory before touching the filesystem.
+        #
+        # `full_path` is attacker-controlled and uvicorn has already percent-decoded it, so
+        # `..%2f..%2f.env` arrives as a path with real separators — Starlette's `{path:path}`
+        # converter cannot help, because by the time it runs the traversal is already part of
+        # the path. Resolving and comparing is the only reliable check; `is_file()` alone
+        # happily reads anything on disk.
+        root = dist.resolve()
+        try:
+            candidate = (root / full_path).resolve()
+        except (OSError, ValueError):
+            return JSONResponse({"error": {"code": "not_found"}}, status_code=404)
+        # Outside the build directory is treated as "not a static file" and falls through to
+        # the SPA shell — same as any unknown deep link. Returning 404 instead would tell a
+        # prober which paths exist.
+        served = candidate.is_relative_to(root) and candidate.is_file()
+        if served:
             # Everything Vite emits under /assets carries a content hash in its name, so it
             # can be cached indefinitely; a changed file gets a new name.
             headers = (

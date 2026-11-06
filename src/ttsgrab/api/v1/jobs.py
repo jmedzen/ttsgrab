@@ -19,7 +19,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks
 from sqlalchemy import select
 
-from ttsgrab.api.deps import Ctx, PrincipalDep, write_audit
+from ttsgrab.api.deps import Ctx, PrincipalDep, guard_provider, write_audit
 from ttsgrab.api.schemas import JobCreate
 from ttsgrab.core.errors import GatewayError, InvalidRequest, NotFound
 from ttsgrab.core.synthesis import synthesize
@@ -184,6 +184,22 @@ async def create_job(
         voice = body.resolved_voice()
     except ValueError as exc:
         raise InvalidRequest(str(exc)) from exc
+
+    # Check the allowlist NOW, while the principal is available. The worker that runs this
+    # job has no principal, so a job queued by a restricted key would otherwise be billed
+    # against whichever provider the router chose.
+    guard_provider(principal, body.provider)
+
+    # Quota is checked here rather than in the worker: the worker has no principal, and a
+    # job that starts only to be rejected has already been reported as "running".
+    if principal.id and principal.monthly_char_quota:
+        async with session_scope() as _q:
+            await ctx.usage.check_key_quota(
+                _q,
+                api_key_id=principal.id,
+                characters=len(body.text),
+                quota=principal.monthly_char_quota,
+            )
 
     async with session_scope() as session:
         job = Job(

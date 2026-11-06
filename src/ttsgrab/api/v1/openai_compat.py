@@ -23,7 +23,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from ttsgrab.api.deps import Ctx, PrincipalDep, check_rate_limit
+from ttsgrab.api.deps import Ctx, PrincipalDep, check_rate_limit, guard_provider
 from ttsgrab.core.errors import GatewayError
 from ttsgrab.core.synthesis import synthesize
 from ttsgrab.core.types import AudioFormat, SynthRequest
@@ -105,6 +105,10 @@ async def openai_speech(
     principal: PrincipalDep,
 ) -> Response:
     await check_rate_limit(ctx, principal, "openai")
+    # The OpenAI-compatible surface is a full synthesis path, so it carries the same
+    # provider restriction as /v1/tts. Omitting the check here would make it the way around
+    # a key's allowlist.
+    guard_provider(principal, body.provider)
     voice = _resolve_voice(ctx, body.voice, body.language, body.provider)
     fmt = _FORMAT_MAP.get(body.response_format, AudioFormat.MP3)
 
@@ -119,7 +123,11 @@ async def openai_speech(
     )
     try:
         outcome = await synthesize(
-            ctx, req, api_key_id=principal.id, client=f"openai-sdk:{principal.name}"
+            ctx,
+            req,
+            api_key_id=principal.id,
+            client=f"openai-sdk:{principal.name}",
+            char_quota=principal.monthly_char_quota,
         )
     except GatewayError as exc:
         # Translate to OpenAI's error envelope so SDKs surface something sensible.

@@ -165,14 +165,21 @@ def mask(value: Any) -> Any:
 
 
 def mask_tree(data: dict[str, Any]) -> dict[str, Any]:
-    """Mask secrets recursively, including list members such as a key pool."""
+    """Mask secrets recursively, including list members such as a key pool.
+
+    Matching is on the **last** dotted segment, not the whole key. Callers pass both shapes:
+    ``/v1/settings`` builds ``"security.admin_token"`` while the on-disk tree is nested
+    ``{"security": {"admin_token": ...}}``. Matching only the nested form left the dotted
+    one in plaintext — an admin token, an API key, all of it, returned to any caller.
+    """
     out: dict[str, Any] = {}
     for key, value in data.items():
+        leaf = str(key).rsplit(".", 1)[-1]
         if isinstance(value, dict):
             out[key] = mask_tree(value)
-        elif isinstance(value, list) and key in SECRET_FIELDS:
+        elif isinstance(value, list) and leaf in SECRET_FIELDS:
             out[key] = [mask(v) if isinstance(v, str) else v for v in value]
-        elif key in SECRET_FIELDS:
+        elif leaf in SECRET_FIELDS:
             out[key] = mask(value)
         else:
             out[key] = value

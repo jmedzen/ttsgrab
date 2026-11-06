@@ -43,6 +43,7 @@ async def synthesize(
     bypass_cache: bool = False,
     api_key_id: str | None = None,
     client: str | None = None,
+    char_quota: int | None = None,
     persist: bool = True,
     job_id: str | None = None,
     pre_split: bool = False,
@@ -71,6 +72,15 @@ async def synthesize(
         owner = ctx.registry.voice_exists_anywhere(req.voice_id)
         if owner:
             req = req.model_copy(update={"provider": owner})
+
+    # Per-key monthly quota. This was implemented, stored, surfaced by the API and
+    # documented — and never called, so a key with a 1000-character allowance happily
+    # consumed 3700. Charged before any provider spend, like the budget check.
+    if api_key_id and char_quota:
+        async with session_scope() as session:
+            await ctx.usage.check_key_quota(
+                session, api_key_id=api_key_id, characters=len(text), quota=char_quota
+            )
 
     provider = ctx.registry.get(req.provider or "")
     if provider is not None:

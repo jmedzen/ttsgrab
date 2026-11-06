@@ -12,10 +12,10 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import Response, StreamingResponse
 
-from ttsgrab.api.deps import Ctx, PrincipalDep, check_rate_limit
+from ttsgrab.api.deps import Ctx, PrincipalDep, check_rate_limit, guard_provider
 from ttsgrab.api.schemas import CompareRequest, TTSRequest, TTSResponse
 from ttsgrab.core.audio import resolve_loudness_target
-from ttsgrab.core.errors import Forbidden, InvalidRequest
+from ttsgrab.core.errors import InvalidRequest
 from ttsgrab.core.obs import SYNTH_CHARS, SYNTH_COST, SYNTH_LATENCY, SYNTH_REQUESTS
 from ttsgrab.core.synthesis import synthesize
 from ttsgrab.core.types import SynthRequest
@@ -49,14 +49,6 @@ def _to_synth_request(body: TTSRequest) -> SynthRequest:
     )
 
 
-def _guard_provider(principal, provider: str | None) -> None:
-    if provider and principal.provider_allowlist and not principal.allows_provider(provider):
-        raise Forbidden(
-            f"this API key may not use provider {provider!r}",
-            details={"allowlist": principal.provider_allowlist},
-        )
-
-
 @router.post("/v1/tts", summary="Synthesise speech (synchronous)")
 async def tts(
     body: TTSRequest,
@@ -65,7 +57,7 @@ async def tts(
     principal: PrincipalDep,
 ) -> Response:
     await check_rate_limit(ctx, principal, "tts")
-    _guard_provider(principal, body.provider)
+    guard_provider(principal, body.provider)
     req = _to_synth_request(body)
 
     # Idempotency: a retried request must not bill twice. Checked before synthesis and
@@ -92,6 +84,7 @@ async def tts(
         bypass_cache=body.bypass_cache,
         api_key_id=principal.id,
         client=principal.name,
+        char_quota=principal.monthly_char_quota,
     )
     result = outcome.result
 
@@ -267,7 +260,7 @@ async def tts_stream(
     roughly independent of total length.
     """
     await check_rate_limit(ctx, principal, "tts")
-    _guard_provider(principal, body.provider)
+    guard_provider(principal, body.provider)
     stream_format = request.query_params.get("stream_format", "audio")
     req = _to_synth_request(body)
 
@@ -400,7 +393,7 @@ async def compare(
         voice_id = target.get("voice_id") or target.get("voice")
         if not provider or not voice_id:
             return {"provider": provider, "voice_id": voice_id, "error": "missing field"}
-        _guard_provider(principal, provider)
+        guard_provider(principal, provider)
         req = SynthRequest(
             text=body.text,
             voice_id=voice_id,
@@ -420,6 +413,7 @@ async def compare(
                 allow_fallback=False,
                 api_key_id=principal.id,
                 client=principal.name,
+                char_quota=principal.monthly_char_quota,
             )
         except Exception as exc:
             return {

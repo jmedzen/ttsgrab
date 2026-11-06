@@ -133,6 +133,10 @@ class McpSettings(BaseModel):
 
     enabled: bool = True
     path: str = "/mcp"
+    # Bearer token MCP clients must present. Falls back to the admin token when unset, but
+    # the mount is refused entirely if neither is configured — its tools synthesise speech
+    # and spend money, so an unauthenticated transport is not acceptable.
+    token: str | None = None
 
 
 class CacheSettings(BaseModel):

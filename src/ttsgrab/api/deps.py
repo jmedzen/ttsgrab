@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import Depends, Header, Request
 
 from ttsgrab.core.context import AppContext
-from ttsgrab.core.errors import Forbidden, Unauthorized
+from ttsgrab.core.errors import Forbidden, InvalidRequest, Unauthorized
 from ttsgrab.core.security import Principal, hash_api_key
 from ttsgrab.db.models import ApiKey, AuditLog
 from ttsgrab.db.session import session_scope
@@ -185,4 +185,31 @@ async def write_audit(
                 detail=audit_detail(**(detail or {})),
                 ip=ip,
             )
+        )
+
+
+def guard_provider(principal: Principal, provider: str | None) -> None:
+    """Enforce a key's provider allowlist — including when it names no provider.
+
+    `if provider and …` was the bug: omitting the field skipped the check entirely and let
+    the router pick from the fallback chain, so a key restricted to the free `edge` provider
+    could be billed against Google or Azure just by leaving `provider` out. A restricted key
+    must name its provider, because only then can the restriction be checked before routing.
+
+    Lives here rather than in `tts.py` because every synthesis surface needs it: the sync
+    endpoint, streaming, compare, jobs and the OpenAI-compatible route. Having it in one
+    module meant the others quietly did not call it.
+    """
+    allowed = getattr(principal, "provider_allowlist", None)
+    if not allowed:
+        return
+    if provider is None:
+        raise InvalidRequest(
+            "this API key is restricted to specific providers, so `provider` is required",
+            details={"allowlist": allowed},
+        )
+    if provider not in allowed:
+        raise Forbidden(
+            f"this API key may not use provider {provider!r}",
+            details={"allowlist": allowed},
         )

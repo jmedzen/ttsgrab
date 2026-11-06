@@ -19,6 +19,31 @@ from ttsgrab.db.session import session_scope
 router = APIRouter(tags=["data"])
 
 
+def _owner_filter(principal: PrincipalDep) -> Any:
+    """Restrict a query to this principal's own rows, unless they are the operator.
+
+    `SynthRecord.api_key_id` was recorded on every synthesis but never filtered on, so any
+    issued key could read — and delete — every other key's transcripts and audio. The
+    admin/UI principal keeps full visibility, because the operator is the person debugging.
+    Anonymous requests (localhost dev) see everything, matching how they can already reach
+    every other admin surface.
+    """
+    if principal.kind in ("admin", "anonymous") or principal.id is None:
+        return None
+    return SynthRecord.api_key_id == principal.id
+
+
+def _owned_by(row: SynthRecord, principal: PrincipalDep) -> bool:
+    """True when this principal may read or delete the row.
+
+    Returning 404 for someone else's record — rather than 403 — keeps ids unguessable:
+    a 403 would confirm the record exists.
+    """
+    if principal.kind in ("admin", "anonymous") or principal.id is None:
+        return True
+    return row.api_key_id == principal.id
+
+
 @router.get("/v1/history", summary="Synthesis history")
 async def history(
     ctx: Ctx,
@@ -31,6 +56,10 @@ async def history(
     async with session_scope() as session:
         stmt = select(SynthRecord).order_by(SynthRecord.created_at.desc())
         count_stmt = select(func.count()).select_from(SynthRecord)
+        owner = _owner_filter(principal)
+        if owner is not None:
+            stmt = stmt.where(owner)
+            count_stmt = count_stmt.where(owner)
         if provider:
             stmt = stmt.where(SynthRecord.provider == provider)
             count_stmt = count_stmt.where(SynthRecord.provider == provider)
@@ -66,7 +95,7 @@ async def history(
 async def history_audio(record_id: str, ctx: Ctx, principal: PrincipalDep) -> FileResponse:
     async with session_scope() as session:
         row = await session.get(SynthRecord, record_id)
-        if row is None or not row.audio_path:
+        if row is None or not _owned_by(row, principal) or not row.audio_path:
             raise NotFound(f"no audio for history record {record_id}")
         path = Path(row.audio_path)
         fmt = row.format
@@ -102,7 +131,7 @@ async def history_subtitles(
         raise NotFound(f"unknown subtitle format {fmt!r}; use srt or vtt")
     async with session_scope() as session:
         row = await session.get(SynthRecord, record_id)
-        if row is None:
+        if row is None or not _owned_by(row, principal):
             raise NotFound(f"no history record {record_id}")
         raw = list(row.segments or [])
     if not raw:
@@ -133,7 +162,7 @@ async def delete_history(record_id: str, ctx: Ctx, principal: PrincipalDep) -> d
 
     async with session_scope() as session:
         row = await session.get(SynthRecord, record_id)
-        if row is None:
+        if row is None or not _owned_by(row, principal):
             raise NotFound(f"history record {record_id} not found")
         if row.audio_path:
             Path(row.audio_path).unlink(missing_ok=True)  # noqa: ASYNC240 - single unlink
