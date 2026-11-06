@@ -383,10 +383,15 @@ def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings
 
     # Priority, highest first: init kwargs (none here) → environment → .env → config.yaml
     # → defaults. The file is deliberately below the environment.
+    # `.env` is a developer convenience, and it is the one input a test suite must not
+    # inherit: running `make test` after `make .env` would otherwise apply the operator's
+    # real port, budget and router settings to every test that builds Settings.
+    env_file = None if os.environ.get("TTSGRAB_IGNORE_ENV_FILE") else ".env"
+
     class _ConfigAwareSettings(Settings):
         model_config = SettingsConfigDict(
             env_prefix="TTSGRAB_",
-            env_file=".env",
+            env_file=env_file,
             env_file_encoding="utf-8",
             env_nested_delimiter="__",
             extra="ignore",

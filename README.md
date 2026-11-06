@@ -135,8 +135,10 @@ free provider, because that turns a loud failure into a silent quality regressio
 | **API Keys** | Per-key provider allowlists, rate limits, monthly quotas |
 
 **Six themes** (Midnight, Ink, Forest, Paper, Mist, Sakura), 繁體中文 / English, responsive.
-Voices you use often can be pinned; picking a provider narrows the voice list to that
-provider and reselects a voice it can actually speak.
+Voices you use often can be starred — from the picker or straight from the Playground's
+favourites row, which puts them one click away and orders them by how recently you pinned
+them. Picking a provider narrows the voice list to that provider and reselects a voice it
+can actually speak.
 
 ### Agents
 

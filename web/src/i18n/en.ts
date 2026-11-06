@@ -84,6 +84,17 @@ const en = {
     duration: 'Duration',
     noTargets: 'Add at least one target to compare.',
   },
+  favourites: {
+    add: 'Add to favourites',
+    saved: 'In favourites',
+    remove: 'Remove from favourites',
+    emptyHint: 'Star a voice to keep it one click away.',
+    limitReached: 'Favourites are full ({{max}}). Remove one first.',
+    noneSelected: 'Pick a voice first.',
+    removeNamed: 'Remove {{name}} from favourites',
+    unavailable: '{{count}} unavailable',
+    clearUnavailable: 'Clear unavailable favourites',
+  },
   voices: {
     loadFailed: 'Could not load voices. Check your admin token, then retry.',
     pin: 'Pin {{name}}',

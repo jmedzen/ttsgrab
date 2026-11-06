@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type Voice } from '../lib/api'
 import clsx from 'clsx'
 import { useTranslation } from 'react-i18next'
-import { loadPins, savePins, togglePin } from '../lib/pins'
+import { usePins } from '../lib/usePins'
 
 interface Props {
   value: string | null
@@ -35,7 +35,7 @@ export default function VoiceSelect({
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
-  const [pins, setPins] = useState<string[]>(() => loadPins())
+  const { pins, toggle: onTogglePin } = usePins()
   const containerRef = useRef<HTMLDivElement>(null)
 
   // A popup that only closes when you click one of its own options traps the user: they
@@ -90,12 +90,6 @@ export default function VoiceSelect({
         .filter((v): v is Voice => Boolean(v)),
     [pins, voices],
   )
-
-  const onTogglePin = (voiceId: string) => {
-    const next = togglePin(pins, voiceId)
-    setPins(next)
-    savePins(next)
-  }
 
   const grouped = useMemo(() => {
     const q = search.trim().toLowerCase()

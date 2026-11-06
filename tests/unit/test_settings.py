@@ -346,3 +346,15 @@ def test_no_stray_legacy_port_in_startup_commands() -> None:
     assert offenders == [], (
         "documentation points at a port the gateway does not use:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_a_developers_dotenv_does_not_leak_into_the_test_suite() -> None:
+    """`make .env` is step two of the quickstart; `make test` is step ten.
+
+    Without this guarantee, a developer's real TTSGRAB_ROUTER__DEFAULT_POLICY or
+    TTSGRAB_PORT silently overrides what a test set up, producing failures that exist only
+    on their machine. The flag is set in conftest so no individual test has to remember it.
+    """
+    import os
+
+    assert os.environ.get("TTSGRAB_IGNORE_ENV_FILE") == "1"

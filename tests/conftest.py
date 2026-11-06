@@ -8,6 +8,12 @@ or fail for the wrong reason.)
 from __future__ import annotations
 
 import os
+
+# Set before any test imports the settings module. Without it a developer who ran
+# `make .env` (the documented quickstart) gets failures from their own real configuration
+# leaking into the suite — e.g. a test that expects the default router policy finding the
+# operator's `cheapest` instead.
+os.environ.setdefault("TTSGRAB_IGNORE_ENV_FILE", "1")
 import tempfile
 from pathlib import Path
 

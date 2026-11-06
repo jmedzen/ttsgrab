@@ -86,6 +86,17 @@ const zhHant: Translation = {
     duration: '音長',
     noTargets: '請至少新增一個比較對象。',
   },
+  favourites: {
+    add: '加入最愛',
+    saved: '已加入最愛',
+    remove: '移出最愛',
+    emptyHint: '按星號收藏語音，下次一點就回來。',
+    limitReached: '最愛已滿（{{max}} 個），請先移除一個。',
+    noneSelected: '請先選擇語音。',
+    removeNamed: '將 {{name}} 移出最愛',
+    unavailable: '{{count}} 個無法使用',
+    clearUnavailable: '清除無法使用的最愛',
+  },
   voices: {
     loadFailed: '無法載入語音清單。請確認管理員權杖後重試。',
     pin: '釘選 {{name}}',

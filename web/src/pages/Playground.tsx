@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiRequestError, formatMs, formatUsd, type AudioFormat, type Policy, type TTSResult } from '../lib/api'
 import AudioPlayer from '../components/AudioPlayer'
 import VoiceSelect from '../components/VoiceSelect'
+import Favourites from '../components/Favourites'
 
 const SAMPLE_ZH = '你好，這是 ttsgrab 的語音合成測試。這一句用來確認繁體中文的發音與語氣。'
 const SAMPLE_EN = 'Hello — this is a ttsgrab synthesis test. This sentence checks prosody and timing.'
@@ -164,6 +165,12 @@ export default function Playground() {
             />
           </div>
         </div>
+
+        <Favourites
+          currentId={voice}
+          filterProvider={provider || null}
+          onPick={(v) => setVoice(v.voice_id)}
+        />
 
         {activeProvider && !activeProvider.official && (
           <p className="mt-3 rounded-lg border border-warn/45 bg-warn/10 px-3 py-2 text-xs text-warn bg-warn/15">

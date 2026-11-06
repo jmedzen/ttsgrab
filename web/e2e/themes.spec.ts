@@ -172,3 +172,97 @@ test.describe('voice pinning', () => {
     )
   })
 })
+
+test.describe('favourites in the playground', () => {
+  test('starring the current voice adds it to the favourites row', async ({ page }) => {
+    await page.goto('/')
+    const row = page.getByTestId('favourites')
+    await expect(row).toBeVisible()
+
+    const toggle = page.getByTestId('favourite-toggle')
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    // A chip appears for the voice, and the counter is a real count.
+    await expect(row.locator('[data-testid^="favourite-remove-"]')).toHaveCount(1)
+    await expect(row).toContainText('1/')
+  })
+
+  test('a favourite survives a reload', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('favourite-toggle').click()
+    const chip = page.locator('[data-testid^="favourite-remove-"]').first()
+    const removeId = await chip.getAttribute('data-testid')
+
+    await page.reload()
+    await expect(page.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator(`[data-testid="${removeId}"]`)).toBeVisible()
+  })
+
+  test('a favourite chip switches the selected voice', async ({ page }) => {
+    await page.goto('/')
+    // Pin the current voice, then move away and jump back via its chip.
+    await page.getByTestId('favourite-toggle').click()
+    const pinnedLabel = await page.getByTestId('voice-select').innerText()
+
+    await page.getByTestId('voice-select').click()
+    await page.getByTestId('voice-search').fill('YunJhe')
+    await page.waitForTimeout(300)
+    await page.getByText(/YunJhe/).first().click()
+    await page.waitForTimeout(300)
+    expect(await page.getByTestId('voice-select').innerText()).not.toBe(pinnedLabel)
+
+    // `favourite-toggle` also starts with "favourite-", so anchor on the voice id.
+    const chip = page.locator('[data-testid^="favourite-zh-"], [data-testid^="favourite-en-"]').first()
+    await chip.click()
+    await page.waitForTimeout(300)
+    expect(await page.getByTestId('voice-select').innerText()).toBe(pinnedLabel)
+  })
+
+  test('the x on a chip removes it', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('favourite-toggle').click()
+    await expect(page.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'true')
+
+    await page.locator('[data-testid^="favourite-remove-"]').first().click()
+    await expect(page.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.locator('[data-testid^="favourite-remove-"]')).toHaveCount(0)
+  })
+
+  test('the star in the picker and the playground stay in step', async ({ page }) => {
+    // Two components read the same store; a change in one must reach the other without a
+    // reload.
+    await page.goto('/')
+    await expect(page.locator('[data-testid^="favourite-remove-"]')).toHaveCount(0)
+
+    await page.getByTestId('voice-select').click()
+    const pin = page.locator('[data-testid^="pin-"]').first()
+    const pinId = (await pin.getAttribute('data-testid'))!.replace('pin-', '')
+    await pin.click()
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(400)
+
+    // The chip for the voice pinned inside the popup appears in the Playground row.
+    // Deliberately not asserting aria-pressed on the toggle: the pinned voice is not
+    // necessarily the *selected* one, and conflating the two was a wrong assumption in
+    // the first version of this test.
+    await expect(page.locator(`[data-testid="favourite-remove-${pinId}"]`)).toBeVisible()
+    await expect(page.getByTestId('favourites')).toContainText('1/')
+
+    // And the reverse: removing it here empties the picker's pinned group.
+    await page.locator(`[data-testid="favourite-remove-${pinId}"]`).click()
+    await page.waitForTimeout(300)
+    await page.getByTestId('voice-select').click()
+    await expect(page.locator('[data-testid^="pin-pinned-"]')).toHaveCount(0)
+  })
+
+  test('the favourites row is translated', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('ttsgrab.lang', 'zh-Hant'))
+    await page.goto('/')
+    await page.reload()
+    await expect(page.getByTestId('favourite-toggle')).toContainText('加入最愛')
+    // The document language must match what is actually rendered.
+    expect(await page.evaluate(() => document.documentElement.lang)).toBe('zh-Hant')
+  })
+})
