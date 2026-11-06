@@ -1,12 +1,13 @@
-"""Long text: the parallel path must be faster *and* produce the same audio.
+"""Long text: the parallel path must actually run in parallel, and produce the same audio.
 
-These use fake providers with artificial latency, so they assert the orchestration
-property rather than the speed of any upstream service.
+These use fake providers that record how many syntheses are in flight at once, so they
+assert the orchestration property rather than the speed of any upstream service. Timing
+ratios were tried first and are not used: a shared CI runner makes them flaky in both
+directions, and a flaky test that means "the machine was busy" teaches people to rerun
+instead of read.
 """
 
 from __future__ import annotations
-
-import time
 
 import pytest
 
@@ -34,24 +35,30 @@ async def test_parallel_synthesis_beats_sequential_and_matches_output(ctx) -> No
     ctx.settings.longform.max_sentence_chars = 300
 
     ctx.settings.longform.max_concurrency = 1
-    started = time.perf_counter()
+    provider.max_in_flight = 0
     sequential = await synthesize(ctx, req, bypass_cache=True)
-    sequential_s = time.perf_counter() - started
+    sequential_peak = provider.max_in_flight
 
     ctx.settings.longform.max_concurrency = 4
-    started = time.perf_counter()
+    provider.max_in_flight = 0
     parallel = await synthesize(ctx, req, bypass_cache=True)
-    parallel_s = time.perf_counter() - started
+    parallel_peak = provider.max_in_flight
 
     assert sequential.chunks == parallel.chunks > 1
     # Same characters, same provider set: batching must not change the result.
     assert len(parallel.result.audio) == len(sequential.result.audio)
 
-    # Generous: the point is that it is not simply equal to the sequential time.
-    assert parallel_s < sequential_s * 0.7, (
-        f"parallel {parallel_s:.2f}s vs sequential {sequential_s:.2f}s — "
+    # Assert the property itself, not a wall-clock ratio. An earlier version compared
+    # parallel time against `sequential * 0.7` and failed on a loaded CI runner at 0.75 —
+    # the chunks *were* concurrent; the ffmpeg concat and process start-up cost were simply
+    # larger than the 60 ms the fake spends sleeping. Peak in-flight count cannot be
+    # perturbed by a busy runner, and it fails for the reason the test name claims.
+    assert sequential_peak == 1, f"max_concurrency=1 let {sequential_peak} chunks run at once"
+    assert parallel_peak > 1, (
+        f"peak in-flight was {parallel_peak} across {parallel.chunks} chunks — "
         "the chunks are not actually running concurrently"
     )
+    assert parallel_peak <= ctx.settings.longform.max_concurrency
 
 
 @pytest.mark.asyncio

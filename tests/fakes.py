@@ -69,6 +69,11 @@ class FakeProvider(TTSProvider):
         self._enabled = enabled
         self.behaviour = behaviour or FakeBehaviour()
         self.calls: list[SynthRequest] = []
+        # Concurrency instrumentation: a test that claims chunks run in parallel should be
+        # able to observe that directly, instead of inferring it from a wall-clock ratio
+        # that, on a shared CI runner, mostly measures how busy the runner was.
+        self.in_flight = 0
+        self.max_in_flight = 0
         self._voices = voices or [
             Voice(
                 provider=name,
@@ -118,7 +123,12 @@ class FakeProvider(TTSProvider):
         )
         if bad and req.strict:
             raise ParamSupportError(bad, self.name)
-        await asyncio.sleep(self.behaviour.latency_ms / 1000)
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(self.behaviour.latency_ms / 1000)
+        finally:
+            self.in_flight -= 1
         return SynthResult(
             audio=SILENT_WAV,
             format=AudioFormat.WAV,
