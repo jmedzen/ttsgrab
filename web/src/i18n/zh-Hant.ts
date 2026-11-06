@@ -182,6 +182,7 @@ const zhHant: Translation = {
     light: '淺色',
   },
   studio: {
+    notConfigured: '尚未設定金鑰——在下方新增一組即可啟用此供應商。',
     title: 'Google AI Studio 金鑰',
     subtitle:
       '免費與付費金鑰分開放，因為行為不同：免費金鑰每天只能請求少數幾次，付費金鑰沒有這個限制。',

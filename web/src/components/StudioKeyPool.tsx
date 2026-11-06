@@ -78,7 +78,13 @@ export default function StudioKeyPool() {
       </div>
       <p className="mb-3 text-xs text-muted">{t('studio.subtitle')}</p>
 
-      {pool?.reason && <p className="mb-3 text-xs text-warn">{pool.reason}</p>}
+      {/* The reason is a raw config key. Keep it as a tooltip for whoever edits the
+          config, but do not print it at someone who just wants to know what to do. */}
+      {pool?.reason && (
+        <p className="mb-3 text-xs text-warn" title={pool.reason}>
+          {t('studio.notConfigured')}
+        </p>
+      )}
 
       {pool && (
         <div className="mb-3 flex flex-wrap gap-4 text-xs">

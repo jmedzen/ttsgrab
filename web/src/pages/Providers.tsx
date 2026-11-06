@@ -96,9 +96,12 @@ export default function Providers() {
               </div>
             </dl>
 
+            {/* The reason is a config key such as `free_web.enabled=false`. Useful when you
+                are the one editing the config, noise when you are not — so it is a tooltip,
+                and the visible text says what it actually means. */}
             {p.reason && (
-              <p className="mt-2 rounded bg-panel2 px-2 py-1 text-xs text-muted">
-                {t('providers.notConfigured')}: {p.reason}
+              <p className="mt-2 rounded bg-panel2 px-2 py-1 text-xs text-muted" title={p.reason}>
+                {t('providers.notConfigured')}
               </p>
             )}
             {p.note && <p className="mt-2 text-xs text-muted">{p.note}</p>}

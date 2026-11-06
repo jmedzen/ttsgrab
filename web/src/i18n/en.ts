@@ -180,6 +180,7 @@ const en = {
     light: 'Light',
   },
   studio: {
+    notConfigured: 'No key configured yet — add one below to enable this provider.',
     title: 'Google AI Studio keys',
     subtitle:
       'Free and paid keys are kept apart because they behave differently: a free key allows only a few requests per day, a paid key does not.',
