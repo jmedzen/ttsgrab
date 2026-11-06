@@ -289,8 +289,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # ones added to the SDK later.
             if not (settings.mcp.token or settings.security.admin_token):
                 logging.getLogger("ttsgrab").warning(
-                    "MCP is enabled but no TTSGRAB_MCP_TOKEN or admin token is configured; "
-                    "refusing to mount it, because its tools spend money."
+                    "MCP is enabled but neither TTSGRAB_MCP__TOKEN nor an admin token is "
+                    "configured; refusing to mount it, because its tools spend money."
                 )
                 settings.mcp.enabled = False
             else:

@@ -154,9 +154,9 @@ has **no** zh-TW voice. Kokoro's Mandarin is weak — its own authors grade it "
 ## MCP
 
 If you are an MCP client, mount `http://localhost:8300/mcp/` with
-`Authorization: Bearer <TTSGRAB_MCP_TOKEN>` — the transport rejects requests without it, and
-the gateway refuses to mount it at all when no token is configured, because its tools spend
-money. Use:
+`Authorization: Bearer <token>`, where the operator sets that token as `TTSGRAB_MCP__TOKEN`
+(or the admin token). The transport rejects requests without it, and the gateway refuses to
+mount it at all when no token is configured, because its tools spend money. Use:
 
 - `synthesize_speech({text, voice, format?, speed?, provider?, policy?})`
 - `list_voices({language?, provider?, free_only?, limit?})`

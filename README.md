@@ -47,7 +47,7 @@ Add cloud providers whenever you want them — the gateway boots fine without an
 
 ```bash
 cp .env.example .env
-$EDITOR .env         # GOOGLE_API_KEY=… / AZURE_SPEECH_KEY=… / GEMINI_API_KEYS=…
+$EDITOR .env         # GOOGLE_API_KEY=… / AZURE_SPEECH_KEY=… / STUDIO_FREE_API_KEYS=…
 docker compose --profile core up -d
 ```
 
@@ -110,6 +110,35 @@ note and an `unsupported: ["format"]` entry. Add `"strict": true` and it becomes
 `422` with the exact list. Silent degradation is a bug, so the API makes it impossible to
 miss.
 
+### The things a long document needs
+
+One request, not a queue-and-poll dance. Above `longform.chunk_threshold` characters the text
+is split on sentence boundaries and synthesised concurrently, then joined — so the first
+audio of a long paragraph arrives in roughly the time of one sentence, not one paragraph.
+
+| Ask for | You get |
+|---|---|
+| `"subtitles": "srt"` (or `vtt`) with `"response": "json"` | Timed captions at no extra cost — the timings come from durations already measured while splitting. Fetchable later at `/v1/history/{id}/subtitles.srt` |
+| `POST /v1/tts/stream` instead | Chunked audio as each sentence finishes; `?stream_format=sse` for base64 chunks plus a final metadata event. `X-Accel-Buffering: no` so nginx does not undo it |
+| `"loudness": "podcast"` | EBU R128 two-pass normalisation to −16 LUFS (`streaming` −14, `broadcast` −23), with −1.5 dBTP of headroom because lossy encoders overshoot the peaks they are given |
+| `Idempotency-Key: <uuid>` | A network retry replays the stored result instead of paying twice. Reusing the key with different text is a `400`, not a silent second charge |
+| `"response": "json"` | Metadata in the same round trip: cost, provider, `unsupported`, `history_id` |
+
+Longer than a few thousand characters and you want the connection back: `POST /v1/jobs`
+returns an id, poll `/v1/jobs/{id}`, or hand it a `webhook_url` (SSRF-checked like every other
+caller-supplied URL).
+
+### Audio that says where it came from
+
+Every mp3 and flac is tagged — `artist` (the provider), `album` (`ttsgrab`), `title`, and a
+machine-readable `comment` (`provider=edge voice=en-US-AriaNeural tier=neural chars=69`, plus
+`cost_micro_usd` when it is not zero) — via `ffmpeg -c copy`, which rewrites only the
+container header. The audio stream stays bit-identical to what the provider returned; nothing
+is re-encoded. A file that leaves this system can therefore still answer "which engine, which
+voice, under what terms" with `ffprobe`, months later, with no access to the gateway. WAV and
+Ogg are skipped rather than half-supported, and a tagging failure is logged rather than
+failing a synthesis you already paid for.
+
 ### A budget that refuses rather than overspends
 
 ```json
@@ -159,9 +188,14 @@ with client.audio.speech.with_streaming_response.create(
 
 Only `base_url` changes. MCP clients get `synthesize_speech`, `list_voices`,
 `list_providers`, `get_usage` at `/mcp`, and must send `Authorization: Bearer <token>` using
-`TTSGRAB_MCP_TOKEN` (or the admin token). The mount is refused outright when neither is set:
-its tools spend money, so an open transport is not an option. Machines read `/llms.txt` and `/agents.md`; humans
-read `/docs` (OpenAPI) or `/redoc`.
+`TTSGRAB_MCP__TOKEN` (or the admin token). The mount is refused outright when neither is set:
+its tools spend money, so an open transport is not an option.
+
+Agents that would rather be told than guess should fetch `/agents.md` or `/llms.txt`: voice
+selection rules, the cost policies, which errors are worth retrying and which are a hard stop,
+and the Traditional Chinese caveats — all plain text, no schema required. `/v1/capabilities`
+answers the same questions in JSON for a program: supported formats, sample rates, policies,
+limits, and the running build.
 
 ---
 
@@ -320,9 +354,11 @@ same SSRF check: non-HTTP schemes, link-local ranges (including cloud metadata a
 `security.allow_private_webhooks: true` (set it when your receiver is a bot on the LAN).
 
 **MCP is refused without a token.** Its tools synthesise speech, so an open transport is an
-open wallet. Mount the extra with `TTSGRAB_MCP_TOKEN` (or an admin token) set, and clients
-send `Authorization: Bearer <token>`. Without either, the gateway logs why and does not mount
-it rather than serving every tool to anyone who can reach the port.
+open wallet. Mount the extra with `TTSGRAB_MCP__TOKEN` (or an admin token) set, and clients
+send `Authorization: Bearer <token>` — inside the container, so a `.env` line is
+`TTSGRAB_MCP__TOKEN=…` and *not* `TTSGRAB_MCP_TOKEN`, which no code reads. Without either, the
+gateway logs why and does not mount it rather than serving every tool to anyone who can reach
+the port.
 
 **Every synthesis path carries the same restrictions.** A key's provider allowlist is checked
 on `/v1/tts`, `/v1/tts/stream`, `/v1/compare`, `/v1/jobs` and `/v1/audio/speech` — a
@@ -382,9 +418,11 @@ curl -s localhost:8300/healthz | python3 -m json.tool
 ```
 
 ```json
-{"status": "ok", "version": "0.1.0", "build": 19, "commit": "e256820",
- "dirty": false, "built_at": "2026-11-05T14:58:44Z"}
+{"status": "ok", "version": "0.1.0", "build": 46, "commit": "1a2b3c4",
+ "dirty": false, "built_at": "2026-11-06T11:41:02Z"}
 ```
+
+Yours will carry its own commit and timestamp; `build` is the number that matters.
 
 The same numbers appear in the UI footer, in `/v1/capabilities`, and in the startup log
 line, so nobody has to ask. `build` is `null` rather than `0` when nothing supplied it —
@@ -395,7 +433,7 @@ a plain source checkout, or an image built without the build-arg — because "un
 worth noticing: the build number is still correct, but it no longer uniquely identifies
 the code.
 
-Docker images are tagged `0.1.0-19` (version-build) and carry OCI labels including
+Docker images are tagged `0.1.0-46` (version-build) and carry OCI labels including
 `ttsgrab.build`. `make build` passes the number through as a build arg, since the build
 context has no `.git`.
 
@@ -404,7 +442,7 @@ context has no `.git`.
 ## Verifying it works
 
 ```bash
-make test                                  # pytest: 385 tests, ~78% statement coverage
+make test                                  # pytest: 398 tests, ~79% statement coverage
 make test-e2e                              # Playwright: real synthesis in the browser
 ./scripts/smoke.sh http://127.0.0.1:8300   # the acceptance checklist, live
 ```
@@ -426,7 +464,7 @@ Honest status of the acceptance list:
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | `docker compose --profile core up` → Edge TTS audible in UI | ✅ the gateway **image** is built and smoke-tested in CI: container starts, 322 voices, 16 992 bytes of real audio from Edge, UI served. The full `core` profile with worker containers is still unbuilt here (no Docker on this machine) |
+| 1 | `docker compose --profile core up` → Edge TTS audible in UI | ✅ the gateway **image** is built and smoke-tested in CI: container starts, the voice catalogue fills (322 voices here), Edge returns real audio of a plausible size, UI served. The full `core` profile with worker containers is still unbuilt here (no Docker on this machine) |
 | 2 | Google credentials → voices appear, usage correct | ⚠️ adapter unit-tested against a mocked API; **not** verified against the live Google API (no account) |
 | 3 | Register LAN worker, then kill it → auto-fallback | ✅ verified end-to-end: a worker speaking the real three-endpoint protocol registered over HTTP, served audio (`X-TTSGrab-Provider: synthetic`), then was killed — the next identical request fell back to `edge` and still returned audio. This run also found a real bug: a worker sending `"Female"` instead of `"female"` made its entire voice list fail validation and silently removed the backend |
 | 4 | OpenAI SDK with only `base_url` changed | ✅ verified with the real `openai` package: `audio.speech.create` returned 22 KB of mp3, the streaming variant worked, `models.list` returned the aliases, and `voice="alloy"` resolved to `en-US-AriaNeural` while a real voice id passed through untouched |
@@ -435,7 +473,7 @@ Honest status of the acceptance list:
 | 7 | No keys in logs, frontend or git history | ✅ log scrubber + secret-pattern smoke check; `gitleaks` in CI |
 
 What CI proves on every push: lint, mypy, the full pytest suite on Python 3.11 and 3.12, the SPA
-typecheck and build, 25 Playwright tests against a live server, the 13-check smoke script,
+typecheck and build, 25 Playwright tests against a live server, the 14-check smoke script,
 a `linux/amd64` gateway image build, a container boot that synthesises real audio, the CPU
 worker image, and a full-history secret scan.
 

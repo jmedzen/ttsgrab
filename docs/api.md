@@ -682,7 +682,7 @@ Mounted at `/mcp` (streamable HTTP) when the `mcp` extra is installed.
 
 Tools: `synthesize_speech` · `list_voices` · `list_providers` · `get_usage`.
 
-**The mount requires a bearer token.** Set `TTSGRAB_MCP_TOKEN` (or an admin token) and send
+**The mount requires a bearer token.** Set `TTSGRAB_MCP__TOKEN` (or an admin token) and send
 `Authorization: Bearer <token>`. With neither configured, the gateway refuses to mount it at
 all and logs why: its tools spend money, so an open transport is an open wallet. Requests
 without the token get `401` with `WWW-Authenticate: Bearer`.
