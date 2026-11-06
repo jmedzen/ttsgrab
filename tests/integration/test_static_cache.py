@@ -10,6 +10,33 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+# The SPA is a build artefact (`make web`) and is gitignored, so a fresh checkout — which is
+# what CI runs — has no index.html. Asserting a cache header on a 503 fallback would be
+# testing the placeholder page.
+_HAS_SPA = (
+    __import__("pathlib").Path(__file__).resolve().parents[2]
+    / "src"
+    / "ttsgrab"
+    / "web"
+    / "index.html"
+).is_file()
+
+needs_spa = pytest.mark.skipif(not _HAS_SPA, reason="SPA not built (run `make web`)")
+
+
+async def test_the_placeholder_page_is_uncacheable_too(client):
+    """When the SPA is not built the server explains how to build it.
+
+    That placeholder must not be cached either — otherwise a user who runs `make web` and
+    restarts still sees "the web UI has not been built yet" and concludes it failed.
+    """
+    if _HAS_SPA:
+        pytest.skip("SPA is built; the placeholder is not served")
+    r = await client.get("/")
+    assert r.status_code == 200
+    assert "make web" in r.text
+    assert "no-cache" in r.headers.get("cache-control", "")
+
 
 @pytest.fixture
 async def client(app):
@@ -17,12 +44,14 @@ async def client(app):
         yield c
 
 
+@needs_spa
 async def test_index_html_is_never_cached(client):
     r = await client.get("/")
     assert r.status_code == 200
     assert "no-cache" in r.headers.get("cache-control", "")
 
 
+@needs_spa
 async def test_index_html_carries_an_etag_and_revalidates_to_304(client):
     first = await client.get("/")
     etag = first.headers.get("etag")
@@ -34,18 +63,21 @@ async def test_index_html_carries_an_etag_and_revalidates_to_304(client):
     assert again.content == b""
 
 
+@needs_spa
 async def test_index_reports_the_serving_build(client):
     r = await client.get("/")
     # Someone reporting "I still see the old UI" needs to be asked for this value.
     assert r.headers.get("x-ttsgrab-build")
 
 
+@needs_spa
 async def test_head_works_for_the_shell_and_liveness(client):
     """Uptime monitors and load balancers probe with HEAD; FastAPI omits it by default."""
     assert (await client.head("/")).status_code == 200
     assert (await client.head("/healthz")).status_code == 200
 
 
+@needs_spa
 async def test_hashed_assets_are_cached_forever(client):
     """Vite puts a content hash in the filename, so a changed file gets a new name."""
     index = await client.get("/")

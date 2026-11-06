@@ -360,6 +360,10 @@ def _mount_web(app: FastAPI) -> None:
                 "<p>Run <code>make web</code> (or <code>cd web &amp;&amp; npm run build</code>), "
                 "then restart. API docs are at <a href='/docs'>/docs</a>.</p>",
                 media_type="text/html",
+                # Same rule as the real shell: never cache. A browser that cached this
+                # keeps showing "the UI has not been built" after the operator has built
+                # it, which reads as a failed build.
+                headers={"Cache-Control": "no-cache, must-revalidate"},
             )
 
         return

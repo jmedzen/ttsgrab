@@ -300,12 +300,24 @@ def mount(app, path: str = "/mcp"):
     if security is not None:
         _ADMIN_TOKEN = getattr(security.security, "admin_token", None)
 
-    inner = MCP.streamable_http_app(
-        streamable_http_path="/",
+    # Probe the signature instead of assuming it. The MCP SDK has shipped at least three
+    # shapes of this method within the 1.x line alone: some versions take neither keyword,
+    # 1.x takes `streamable_http_path`, and 2.x adds `transport_security`. Passing a keyword
+    # an installed version does not define raises TypeError at mount time and takes the
+    # whole app down, so ask what this one accepts.
+    import inspect
+
+    accepted = set(inspect.signature(MCP.streamable_http_app).parameters)
+    kwargs: dict[str, object] = {}
+    if "streamable_http_path" in accepted:
+        kwargs["streamable_http_path"] = "/"
+    if "transport_security" in accepted:
         # The gateway is commonly reached by a LAN hostname or container name; the SDK's
         # DNS-rebinding protection allows only localhost by default.
-        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
-    )
+        kwargs["transport_security"] = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        )
+    inner = MCP.streamable_http_app(**kwargs)
     app.mount(path, inner)
     return inner
 
