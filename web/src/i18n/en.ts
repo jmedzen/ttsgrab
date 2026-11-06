@@ -156,6 +156,8 @@ const en = {
     when: 'When',
     latency: 'Latency',
     cost: 'Cost',
+    replayNamed: 'Replay the synthesis that starts "{{text}}"',
+    deleteNamed: 'Delete the synthesis that starts "{{text}}"',
     replay: 'Replay',
     deleteConfirm: 'Delete this recording and its audio file?',
   },

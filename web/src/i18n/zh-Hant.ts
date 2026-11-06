@@ -158,6 +158,8 @@ const zhHant: Translation = {
     when: '時間',
     latency: '延遲',
     cost: '費用',
+    replayNamed: '重播開頭為「{{text}}」的合成',
+    deleteNamed: '刪除開頭為「{{text}}」的合成',
     replay: '重播',
     deleteConfirm: '確定刪除此紀錄與音檔？',
   },

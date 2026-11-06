@@ -25,6 +25,8 @@ export interface PinsApi {
   rows: FavouriteVoice[]
   isPinned: (voiceId: string | null) => boolean
   toggle: (voiceId: string, meta?: { provider?: string; name?: string }) => void
+  /** Used to drop favourites whose provider has gone away. */
+  remove: { mutate: (voiceId: string) => void }
   atLimit: boolean
   max: number
   isLoading: boolean
@@ -111,6 +113,7 @@ export function usePins(): PinsApi {
     rows,
     isPinned,
     toggle,
+    remove,
     atLimit: pins.length >= MAX_PINS,
     max: MAX_PINS,
     isLoading,

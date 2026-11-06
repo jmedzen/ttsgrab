@@ -70,6 +70,10 @@ export default function History() {
                   <button
                     type="button"
                     className="btn-ghost px-2 py-1 text-xs"
+                    aria-expanded={openId === item.id}
+                    aria-label={t('history.replayNamed', {
+                      text: item.text.slice(0, 40),
+                    })}
                     onClick={() => setOpenId(openId === item.id ? null : item.id)}
                   >
                     {t('history.replay')}
@@ -78,6 +82,9 @@ export default function History() {
                 <button
                   type="button"
                   className="btn-danger px-2 py-1 text-xs"
+                  aria-label={t('history.deleteNamed', {
+                    text: item.text.slice(0, 40),
+                  })}
                   onClick={() => {
                     if (confirm(t('history.deleteConfirm'))) remove.mutate(item.id)
                   }}

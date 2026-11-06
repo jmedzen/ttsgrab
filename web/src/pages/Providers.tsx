@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import QueryError from '../components/QueryError'
 import StudioKeyPool from '../components/StudioKeyPool'
 import { api, formatMs } from '../lib/api'
 
@@ -8,6 +9,12 @@ export default function Providers() {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const providersQuery = useQuery({ queryKey: ['providers'], queryFn: api.providers })
+
+  // A failed provider list must not render as "no providers configured": that is the one
+  // page whose whole job is to say what is available.
+  if (providersQuery.isError) {
+    return <QueryError error={providersQuery.error} onRetry={() => void providersQuery.refetch()} />
+  }
   const workersQuery = useQuery({ queryKey: ['workers'], queryFn: api.workers })
 
   const [name, setName] = useState('')

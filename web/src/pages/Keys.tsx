@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import QueryError from '../components/QueryError'
 import { api, getToken, setToken } from '../lib/api'
 
 const CURL_EXAMPLE = `curl -X POST http://127.0.0.1:8000/v1/tts \\
@@ -30,6 +31,17 @@ export default function Keys() {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const keysQuery = useQuery({ queryKey: ['keys'], queryFn: api.apiKeys })
+
+  // Without this, a 401 renders as "No API keys yet" — the operator reads that as "they were
+  // deleted" when the truth is "your token is wrong". Opposite facts, opposite actions.
+  if (keysQuery.isError) {
+    return (
+      <div className="grid gap-4">
+        <h1 className="text-xl font-semibold">{t('keys.title')}</h1>
+        <QueryError error={keysQuery.error} onRetry={() => void keysQuery.refetch()} />
+      </div>
+    )
+  }
   const providersQuery = useQuery({ queryKey: ['providers'], queryFn: api.providers })
 
   const [name, setName] = useState('')

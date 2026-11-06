@@ -100,8 +100,13 @@ test.describe('provider → voice follow', () => {
 
     // The popup groups by provider; with a provider chosen there must be exactly one group
     // heading, and it must be edge.
+    //
+    // The `aria-expanded` wait is the real race: the popup renders before the voice list has
+    // arrived, so reading the headings immediately can catch the empty state and fail only
+    // when the machine is busy. Wait for a group to exist, then assert on what it says.
     const groups = page.locator('[data-testid="voice-select"]')
     await expect(groups).toHaveAttribute('aria-expanded', 'true')
+    await page.locator('div.sticky').first().waitFor({ state: 'visible' })
 
     const headings = page.locator('div.sticky')
     const texts = await headings.allInnerTexts()

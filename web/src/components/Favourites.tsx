@@ -78,7 +78,7 @@ interface RowProps {
  */
 export default function Favourites({ currentId, filterProvider, onPick }: RowProps) {
   const { t } = useTranslation()
-  const { rows, toggle, max } = usePins()
+  const { rows, toggle, max, remove } = usePins()
 
   // Shares the picker's cache key, so this row costs no extra request and the two views
   // can never disagree about which provider a voice belongs to.
@@ -150,9 +150,20 @@ export default function Favourites({ currentId, filterProvider, onPick }: RowPro
         </span>
       ))}
       {staleCount > 0 && (
-        <span className="text-muted-soft" title={t('favourites.unavailableTitle')}>
-          {t('favourites.unavailable', { count: staleCount })}
-        </span>
+        // A `title` tooltip is invisible on touch and undiscoverable everywhere else.
+        // Unavailable favourites are chips the user cannot act on, so the way to get rid of
+        // them has to be a real, tappable control.
+        <button
+          type="button"
+          className="rounded px-1.5 py-0.5 text-xs text-muted-soft underline decoration-dotted hover:text-fg"
+          title={t('favourites.unavailableTitle')}
+          onClick={() => {
+            for (const v of resolved.filter((r) => !r.live)) remove.mutate(v.voiceId)
+          }}
+          data-testid="favourites-clear-unavailable"
+        >
+          {t('favourites.clearUnavailable')} ({staleCount})
+        </button>
       )}
       <span className="ml-auto text-muted-soft">
         {rows.length}/{max}

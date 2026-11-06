@@ -164,8 +164,16 @@ export default function Voices() {
                 <span className="badge bg-panel2 text-muted">
                   {v.provider}
                 </span>
-                <span className="badge bg-panel2 text-muted">
+                {/* Show the count of what is hidden and put the full list in the
+                    tooltip: "en-US / ja-JP" on a 12-language voice reads as "this voice
+                    speaks two languages", which is wrong and not checkable without
+                    opening it. */}
+                <span
+                  className="badge bg-panel2 text-muted"
+                  title={v.languages.join(', ')}
+                >
                   {v.languages.slice(0, 2).join(' / ')}
+                  {v.languages.length > 2 && ` +${v.languages.length - 2}`}
                 </span>
                 {v.gender !== 'unknown' && (
                   <span className="badge bg-panel2 text-muted">
