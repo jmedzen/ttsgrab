@@ -78,6 +78,17 @@ async def lifespan(app: FastAPI):
         except TimeoutError:
             log.warning("MCP lifespan did not start within 10s; /mcp may be unavailable")
 
+    # Retention: without this nothing ever deletes a history row or an audio file, so the
+    # data directory grows with every synthesis until the volume fills.
+    retention_task: asyncio.Task | None = None
+    if settings.retention.enabled:
+        from ttsgrab.core import retention
+
+        retention_task = asyncio.create_task(
+            retention.background_loop(settings, interval_s=settings.retention.interval_s),
+            name="retention",
+        )
+
     log.info(
         "ttsgrab %s ready — providers=%s voices=%d db=%s",
         build_info().label(),
@@ -88,6 +99,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        if retention_task is not None:
+            retention_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await retention_task
         if mcp_task is not None:
             mcp_stop.set()
             try:

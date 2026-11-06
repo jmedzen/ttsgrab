@@ -139,6 +139,23 @@ class McpSettings(BaseModel):
     token: str | None = None
 
 
+class RetentionSettings(BaseModel):
+    """Bounded growth for history, audio and idempotency rows.
+
+    Off by default: deleting a user's history is destructive, and an upgrade must not start
+    silently removing data on a box whose operator never asked for it.
+    """
+
+    enabled: bool = False
+    # Newest N rows are always kept, whatever their age. Pruning below MIN_KEEP is refused.
+    keep_records: int = 5000
+    max_age_days: int = 90
+    # Idempotency keys only matter for the retry window; 24h matches the documented promise.
+    idempotency_hours: int = 24
+    # How often the maintenance loop runs.
+    interval_s: int = 3600
+
+
 class CacheSettings(BaseModel):
     enabled: bool = True
     dir: str = "./data/cache"
@@ -247,6 +264,7 @@ class Settings(BaseSettings):
     google_ai_studio: GoogleAIStudioSettings = Field(default_factory=GoogleAIStudioSettings)
     azure: AzureSettings = Field(default_factory=AzureSettings)
     cache: CacheSettings = Field(default_factory=CacheSettings)
+    retention: RetentionSettings = Field(default_factory=RetentionSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)
     router: RouterSettings = Field(default_factory=RouterSettings)
     favourites: FavouritesSettings = Field(default_factory=FavouritesSettings)

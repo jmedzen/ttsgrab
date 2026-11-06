@@ -53,6 +53,13 @@ EDITABLE: dict[str, str] = {
     "cache.dir": "str",
     "cache.max_bytes": "int",
     "cache.ttl_seconds": "int",
+    "retention.enabled": "bool",
+    "retention.keep_records": "int",
+    "retention.max_age_days": "int",
+    "retention.idempotency_hours": "int",
+    "mcp.enabled": "bool",
+    "mcp.path": "str",
+    "mcp.token": "secret",
     # Long-form
     "longform.chunk_threshold": "int",
     "longform.max_concurrency": "int",

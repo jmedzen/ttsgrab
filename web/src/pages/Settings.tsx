@@ -61,6 +61,13 @@ const GROUPS: { title: string; keys: string[] }[] = [
       'cache.dir',
       'cache.max_bytes',
       'cache.ttl_seconds',
+      'retention.enabled',
+      'retention.keep_records',
+      'retention.max_age_days',
+      'retention.idempotency_hours',
+      'mcp.enabled',
+      'mcp.path',
+      'mcp.token',
     ],
   },
   {
@@ -79,35 +86,41 @@ const GROUPS: { title: string; keys: string[] }[] = [
 
 /** Human labels; the raw dotted path is shown underneath as the thing config.yaml stores. */
 const LABELS: Record<string, string> = {
-  'edge.enabled': 'Edge TTS',
-  'free_web.enabled': 'Free web providers',
-  'free_web.gtts_enabled': 'gTTS',
-  'free_web.translate_tts_enabled': 'Google Translate TTS',
-  'google_cloud.enabled': 'Google Cloud TTS',
-  'google_cloud.api_key': 'Google Cloud API key',
-  'google_cloud.credentials_file': 'Service account JSON path',
-  'google_cloud.monthly_budget_micro_usd': 'Monthly budget (micro-USD)',
-  'google_ai_studio.enabled': 'Google AI Studio',
-  'google_ai_studio.free_api_keys': 'AI Studio free keys',
-  'google_ai_studio.paid_api_keys': 'AI Studio paid keys',
-  'azure.enabled': 'Azure Speech',
-  'azure.api_key': 'Azure key',
-  'azure.region': 'Azure region',
-  'router.default_policy': 'Default routing policy',
-  'router.fallback_chain': 'Fallback chain',
-  'router.monthly_budget_micro_usd': 'Global monthly budget (micro-USD)',
-  write_metadata: 'Write provenance into audio files',
-  'longform.chunk_threshold': 'Long-form split threshold (chars)',
-  'longform.max_concurrency': 'Long-form concurrency',
-  'cache.enabled': 'Disk cache',
-  'cache.dir': 'Cache directory',
-  'cache.max_bytes': 'Cache size limit (bytes)',
-  'cache.ttl_seconds': 'Cache TTL (seconds)',
-  'security.admin_token': 'Admin token',
-  'security.allow_localhost_without_token': 'Allow localhost without a token',
-  'security.rate_limit_per_minute': 'Rate limit (requests/minute)',
-  'favourites.seed_enabled': 'Seed favourites on first boot',
-  'favourites.seed': 'Seeded favourites',
+  'edge.enabled': `config.field.edge.enabled`,
+  'free_web.enabled': `config.field.free_web.enabled`,
+  'free_web.gtts_enabled': `config.field.free_web.gtts_enabled`,
+  'free_web.translate_tts_enabled': `config.field.free_web.translate_tts_enabled`,
+  'google_cloud.enabled': `config.field.google_cloud.enabled`,
+  'google_cloud.api_key': `config.field.google_cloud.api_key`,
+  'google_cloud.credentials_file': `config.field.google_cloud.credentials_file`,
+  'google_cloud.monthly_budget_micro_usd': `config.field.google_cloud.monthly_budget_micro_usd`,
+  'google_ai_studio.enabled': `config.field.google_ai_studio.enabled`,
+  'google_ai_studio.free_api_keys': `config.field.google_ai_studio.free_api_keys`,
+  'google_ai_studio.paid_api_keys': `config.field.google_ai_studio.paid_api_keys`,
+  'azure.enabled': `config.field.azure.enabled`,
+  'azure.api_key': `config.field.azure.api_key`,
+  'azure.region': `config.field.azure.region`,
+  'router.default_policy': `config.field.router.default_policy`,
+  'router.fallback_chain': `config.field.router.fallback_chain`,
+  'router.monthly_budget_micro_usd': `config.field.router.monthly_budget_micro_usd`,
+  'longform.chunk_threshold': `config.field.longform.chunk_threshold`,
+  'longform.max_concurrency': `config.field.longform.max_concurrency`,
+  'cache.enabled': `config.field.cache.enabled`,
+  'cache.dir': `config.field.cache.dir`,
+  'cache.max_bytes': `config.field.cache.max_bytes`,
+  'cache.ttl_seconds': `config.field.cache.ttl_seconds`,
+  'retention.enabled': `config.field.retention.enabled`,
+  'retention.keep_records': `config.field.retention.keep_records`,
+  'retention.max_age_days': `config.field.retention.max_age_days`,
+  'retention.idempotency_hours': `config.field.retention.idempotency_hours`,
+  'mcp.enabled': `config.field.mcp.enabled`,
+  'mcp.path': `config.field.mcp.path`,
+  'mcp.token': `config.field.mcp.token`,
+  'security.admin_token': `config.field.security.admin_token`,
+  'security.allow_localhost_without_token': `config.field.security.allow_localhost_without_token`,
+  'security.rate_limit_per_minute': `config.field.security.rate_limit_per_minute`,
+  'favourites.seed_enabled': `config.field.favourites.seed_enabled`,
+  'favourites.seed': `config.field.favourites.seed`,
 }
 
 function isSecret(kind: SettingKind): boolean {
@@ -168,7 +181,7 @@ export default function Settings() {
       <label key={key} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm">
-            <span className="truncate">{LABELS[key] ?? key}</span>
+            <span className="truncate">{t(LABELS[key] ?? key)}</span>
             {shadowed && (
               <span
                 className="shrink-0 rounded bg-warn/15 px-1 text-[10px] text-warn"
