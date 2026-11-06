@@ -383,13 +383,25 @@ def _route_label(request: Request) -> str:
     return getattr(route, "path", request.url.path)
 
 
+_API_PREFIXES = (
+    "v1/",
+    "mcp",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "metrics",
+    "healthz",
+    "readyz",
+    "assets/",
+)
+
+
 def _mount_web(app: FastAPI) -> None:
     """Serve the built SPA if present; otherwise show a helpful placeholder."""
     dist = WEB_DIST
     if not dist.is_dir() or not (dist / "index.html").is_file():
 
-        @app.get("/", include_in_schema=False)
-        async def _no_ui() -> Response:
+        def _placeholder() -> Response:
             return Response(
                 "<h1>ttsgrab</h1><p>The web UI has not been built yet.</p>"
                 "<p>Run <code>make web</code> (or <code>cd web &amp;&amp; npm run build</code>), "
@@ -400,6 +412,20 @@ def _mount_web(app: FastAPI) -> None:
                 # it, which reads as a failed build.
                 headers={"Cache-Control": "no-cache, must-revalidate"},
             )
+
+        @app.api_route("/", include_in_schema=False, methods=["GET", "HEAD"])
+        async def _no_ui() -> Response:
+            return _placeholder()
+
+        # Deep links too, not just `/`. Someone who bookmarks /settings and then runs a
+        # source checkout without `make web` gets a 404 that says nothing useful; the
+        # placeholder at least tells them the one command that fixes it. API paths are still
+        # 404 — they must not be answered with HTML.
+        @app.api_route("/{full_path:path}", include_in_schema=False, methods=["GET", "HEAD"])
+        async def _no_ui_deep(full_path: str) -> Response:
+            if full_path.startswith(_API_PREFIXES):
+                return JSONResponse({"error": {"code": "not_found"}}, status_code=404)
+            return _placeholder()
 
         return
 
@@ -474,19 +500,7 @@ def _mount_web(app: FastAPI) -> None:
     @app.get("/{full_path:path}", include_in_schema=False)
     async def _spa(full_path: str, request: Request) -> Response:
         # Never swallow API routes.
-        if full_path.startswith(
-            (
-                "v1/",
-                "mcp",
-                "docs",
-                "redoc",
-                "openapi.json",
-                "metrics",
-                "healthz",
-                "readyz",
-                "assets/",
-            )
-        ):
+        if full_path.startswith(_API_PREFIXES):
             return JSONResponse({"error": {"code": "not_found"}}, status_code=404)
         # Confine to the SPA directory before touching the filesystem.
         #

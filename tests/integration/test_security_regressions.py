@@ -55,10 +55,54 @@ async def test_spa_route_cannot_escape_the_build_directory(anon, attack):
         assert marker not in body, f"{attack} leaked {marker!r}"
 
 
-async def test_a_legitimate_deep_link_still_renders_the_spa(anon):
-    """The traversal fix must not break client-side routing."""
-    r = await anon.get("/settings")
-    assert r.status_code == 200
+@pytest.fixture
+def no_spa(monkeypatch, tmp_path):
+    """Force the "SPA not built" branch.
+
+    The SPA is a build artefact and gitignored, so a fresh checkout — what CI runs — has no
+    index.html and serves the placeholder. Locally it exists, so a test that does not force
+    one branch or the other passes for a different reason here than in CI. That is how the
+    CI failure that prompted this test got in.
+    """
+    from ttsgrab import main as main_mod
+
+    empty = tmp_path / "web"
+    empty.mkdir()
+    monkeypatch.setattr(main_mod, "WEB_DIST", empty)
+    return empty
+
+
+async def test_placeholder_answers_deep_links_not_just_the_root(no_spa, anon):
+    """A bookmarked /settings on a source checkout must not 404.
+
+    The placeholder exists to say "run `make web`". Only registering it on `/` meant the one
+    user who needed that message — someone with a bookmark — got a bare 404 instead.
+    """
+    for path in ("/", "/settings", "/history", "/anything/deep"):
+        r = await anon.get(path)
+        assert r.status_code == 200, f"{path} returned {r.status_code} instead of the placeholder"
+        assert "make web" in r.text
+
+
+async def test_placeholder_never_answers_an_api_path(no_spa, anon):
+    """HTML for `/v1/*` would be a far worse bug than a 404: clients parse it."""
+    r = await anon.get("/v1/does-not-exist")
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("application/json")
+
+
+async def test_the_traversal_block_holds_without_a_built_spa(no_spa, anon):
+    """The other catch-all needs the same confinement, or the placeholder branch is the way in."""
+    r = await anon.get("/..%2f..%2f..%2f.env")
+    assert "ADMIN_TOKEN" not in r.text
+    assert "Secrets belong" not in r.text
+
+
+async def test_an_api_path_is_never_answered_with_html(anon):
+    """Whatever the SPA branch does, it must not swallow `/v1/*`."""
+    r = await anon.get("/v1/does-not-exist")
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("application/json")
 
 
 # -- /v1/settings -----------------------------------------------------------------------
