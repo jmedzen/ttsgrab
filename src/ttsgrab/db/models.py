@@ -67,6 +67,10 @@ class SynthRecord(Base):
     api_key_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     client: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Sentence-level timing for the split path, stored instead of rendered subtitles so
+    # SRT and WebVTT (or anything added later) are derived on read rather than frozen at
+    # synthesis time.
+    segments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 
     __table_args__ = (Index("ix_history_created_provider", "created_at", "provider"),)
 
@@ -144,6 +148,31 @@ class Job(Base):
     webhook_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     webhook_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     api_key_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class IdempotencyRecord(Base):
+    """What an Idempotency-Key resolved to, so a retry returns the first result.
+
+    Network retries are normal; paying twice for one sentence is not. The row stores the
+    history id rather than the audio: the audio already lives on disk with the history
+    record, and copying it here would double every file.
+
+    Scoped by API key id, because an Idempotency-Key is the client's token, not a global
+    name — two clients may pick the same UUID without wanting each other's audio.
+    """
+
+    __tablename__ = "idempotency"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    api_key_id: Mapped[str] = mapped_column(String(32), primary_key=True, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
+    )
+    # Hash of the request body. A reused key with a *different* body must be rejected
+    # rather than silently returning unrelated audio.
+    request_hash: Mapped[str] = mapped_column(String(64))
+    history_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
 
 
 class WorkerNode(Base):

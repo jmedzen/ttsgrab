@@ -44,6 +44,20 @@ class TTSRequest(BaseModel):
         default=False, description="Reject unsupported params instead of degrading."
     )
     bypass_cache: bool = False
+    loudness: str | float | None = Field(
+        default=None,
+        description=(
+            "Normalise to an EBU R128 target: 'podcast' (-16 LUFS), 'streaming' (-14), "
+            "'broadcast' (-23), or an explicit number. Requires ffmpeg."
+        ),
+    )
+    subtitles: Literal["srt", "vtt"] | None = Field(
+        default=None,
+        description=(
+            "Also produce subtitles from the per-segment timing already measured during "
+            "synthesis. Only meaningful for multi-segment text."
+        ),
+    )
     response: Literal["audio", "json"] = Field(
         default="audio", description="`audio` streams bytes; `json` returns base64 + URL."
     )
@@ -88,6 +102,12 @@ class TTSResponse(BaseModel):
     requested_provider: str | None = None
     policy: str | None = None
     attempts: list[dict[str, Any]] = Field(default_factory=list)
+    # Present only when the request asked for subtitles. The text is returned inline because
+    # a caller synthesising an audio track almost always wants the subtitles in the same
+    # round trip; `subtitles_url` is for fetching them later by history id.
+    subtitles: str | None = None
+    subtitles_format: str | None = None
+    subtitles_url: str | None = None
 
 
 class VoiceOut(BaseModel):
@@ -126,6 +146,8 @@ class UsageOut(BaseModel):
     by_provider: dict[str, Any]
     free_tier: dict[str, Any]
     budgets: dict[str, Any]
+    # Projected days until each provider's monthly allowance runs out.
+    runway: dict[str, Any] = Field(default_factory=dict)
 
 
 class HistoryItem(BaseModel):

@@ -26,6 +26,13 @@ Returns raw audio bytes (mp3 by default). Read the headers:
 | `X-TTSGrab-Cached` | whether you paid for it |
 | `X-TTSGrab-Cost-MicroUSD` | integer micro-USD billed |
 | `X-TTSGrab-Fallback` | present only if a fallback happened |
+| `X-TTSGrab-Subtitles-Url` | present when you asked for `subtitles` |
+| `X-TTSGrab-Idempotent-Replay` | `true` means this was a replay, not a new charge |
+| `X-TTSGrab-Degraded` | `true` when a fallback served lower quality than requested |
+
+Every mp3/flac is also tagged (`artist`/`album`/`comment`) with the provider, voice and
+character count, via a stream copy that leaves the audio bit-identical. Assume a file you
+produce can be audited by whoever receives it.
 
 ---
 
@@ -43,6 +50,15 @@ Returns raw audio bytes (mp3 by default). Read the headers:
    `"strict": true` to get a hard `422` instead of silently degraded audio.
 5. **Long text?** Over ~2000 characters, use `POST /v1/jobs` and poll `GET /v1/jobs/{id}`
    rather than holding an HTTP connection open.
+6. **Retrying?** Send `Idempotency-Key: <uuid>` before the first attempt. Then a network
+   retry replays the stored result instead of paying again. Reusing the key with *different*
+   text is a `400`, so generate a fresh UUID per logical request.
+7. **Need captions?** Add `"subtitles": "srt"` (or `"vtt"`) with `"response": "json"`. The
+   timings come free from the split path. The URL stays fetchable at
+   `/v1/history/{id}/subtitles.srt`.
+8. **Mixing providers in one project?** Set `"loudness": "podcast"` (−16 LUFS) or
+   `"streaming"` (−14). Providers differ by several dB; unnormalised cuts are audible as a
+   volume jump between sentences.
 
 ---
 
@@ -62,6 +78,7 @@ Returns raw audio bytes (mp3 by default). Read the headers:
   transient error.
 - **Reuse cached audio.** Identical text + voice + params is served from disk at zero cost.
   Do not add timestamps or random suffixes to force a fresh synthesis unless you mean it.
+- **A `429` carries `Retry-After` in seconds.** Honour it. Retrying sooner cannot succeed.
 - **Google AI Studio free keys are rate-limited per day, not per minute.** A free key allows
   only ~10 TTS requests per day; a long document will exhaust it in one go. If
   `/v1/providers` reports `google_ai_studio` as enabled but synthesis returns

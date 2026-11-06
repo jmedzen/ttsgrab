@@ -207,6 +207,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/ttsgrab.db"
     data_dir: str = "./data"
 
+    # Write provenance tags into the audio itself (mp3/flac). On by default: a file that
+    # outlives the gateway is the normal case, and the cost is a container header rewrite.
+    write_metadata: bool = True
+
     public_base_url: str = "http://127.0.0.1:8300"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 

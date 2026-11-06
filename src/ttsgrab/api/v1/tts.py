@@ -14,6 +14,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from ttsgrab.api.deps import Ctx, PrincipalDep, check_rate_limit
 from ttsgrab.api.schemas import CompareRequest, TTSRequest, TTSResponse
+from ttsgrab.core.audio import resolve_loudness_target
 from ttsgrab.core.errors import Forbidden, InvalidRequest
 from ttsgrab.core.obs import SYNTH_CHARS, SYNTH_COST, SYNTH_LATENCY, SYNTH_REQUESTS
 from ttsgrab.core.synthesis import synthesize
@@ -42,6 +43,8 @@ def _to_synth_request(body: TTSRequest) -> SynthRequest:
         language=body.language,
         reference_audio_id=body.reference_audio_id,
         strict=body.strict,
+        loudness=resolve_loudness_target(body.loudness),
+        want_segments=body.subtitles is not None,
         extra=body.extra,
     )
 
@@ -65,6 +68,22 @@ async def tts(
     _guard_provider(principal, body.provider)
     req = _to_synth_request(body)
 
+    # Idempotency: a retried request must not bill twice. Checked before synthesis and
+    # before any cache write so the second attempt costs nothing at all.
+    idem_key = request.headers.get("Idempotency-Key")
+    if idem_key:
+        from ttsgrab.core.idempotency import IdempotencyConflict, begin, finish, request_fingerprint
+
+        if len(idem_key) > 255:
+            raise InvalidRequest("Idempotency-Key must be at most 255 characters")
+        fingerprint = request_fingerprint(body.model_dump(mode="json", exclude_none=True))
+        try:
+            replay = await begin(key=idem_key, api_key_id=principal.id, fingerprint=fingerprint)
+        except IdempotencyConflict as exc:
+            raise InvalidRequest(str(exc), param="Idempotency-Key") from exc
+        if replay is not None:
+            return await _replay(replay, ctx, principal)
+
     outcome = await synthesize(
         ctx,
         req,
@@ -75,6 +94,29 @@ async def tts(
         client=principal.name,
     )
     result = outcome.result
+
+    # Subtitles come from the per-segment timing the split path already measured.
+    subtitle_text: str | None = None
+    subtitle_url: str | None = None
+    if body.subtitles:
+        if result.segments:
+            from ttsgrab.core.subtitles import render
+
+            subtitle_text = render(result.segments, body.subtitles)
+            if outcome.history_id:
+                subtitle_url = f"/v1/history/{outcome.history_id}/subtitles.{body.subtitles}"
+        elif body.response == "audio":
+            # Refusing here rather than returning audio with no subtitles: a caller that
+            # asked for both and silently got one would ship a video with no captions.
+            raise InvalidRequest(
+                "subtitles require text long enough to be split into segments; "
+                "this input was synthesised in one piece and has no internal timing",
+                param="subtitles",
+            )
+
+    if idem_key:
+        with contextlib.suppress(Exception):
+            await finish(key=idem_key, api_key_id=principal.id, history_id=outcome.history_id)
 
     SYNTH_REQUESTS.labels(result.provider, "ok", str(result.from_cache)).inc()
     SYNTH_LATENCY.labels(result.provider).observe((result.latency_ms or 0) / 1000)
@@ -108,21 +150,60 @@ async def tts(
             requested_provider=outcome.meta.get("requested_provider"),
             policy=outcome.meta.get("policy"),
             attempts=outcome.meta.get("attempts") or [],
+            subtitles=subtitle_text,
+            subtitles_format=body.subtitles,
+            subtitles_url=subtitle_url,
         )
         return Response(
             content=payload.model_dump_json(),
             media_type="application/json",
-            headers=_headers(outcome),
+            headers=_headers(outcome, subtitles_url=subtitle_url),
         )
 
     return Response(
         content=result.audio,
         media_type=result.format.mime,
-        headers=_headers(outcome),
+        headers=_headers(outcome, subtitles_url=subtitle_url),
     )
 
 
-def _headers(outcome) -> dict[str, str]:
+async def _replay(replay, ctx, principal) -> Response:
+    """Serve the stored outcome for a repeated Idempotency-Key.
+
+    Reads the audio back off disk rather than re-synthesising. If the file has since been
+    deleted the honest answer is a 404 with an explanation — silently re-synthesising
+    would defeat the entire point of the key.
+    """
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    from ttsgrab.core.errors import NotFound
+    from ttsgrab.db.models import SynthRecord
+    from ttsgrab.db.session import session_scope
+
+    if not replay.history_id:
+        raise NotFound("this Idempotency-Key was recorded without a stored result")
+    async with session_scope() as session:
+        row = await session.get(SynthRecord, replay.history_id)
+        if row is None:
+            raise NotFound("the recorded result for this Idempotency-Key no longer exists")
+        audio_path, fmt = row.audio_path, row.format
+    if not audio_path or not Path(audio_path).is_file():  # noqa: ASYNC240
+        raise NotFound("the recorded result for this Idempotency-Key was deleted from disk")
+    mime = {"mp3": "audio/mpeg", "wav": "audio/wav", "opus": "audio/ogg", "flac": "audio/flac"}
+    return FileResponse(
+        Path(audio_path),
+        media_type=mime.get(fmt, "application/octet-stream"),
+        headers={
+            "X-TTSGrab-Idempotent-Replay": "true",
+            "X-TTSGrab-History-Id": replay.history_id,
+            "Content-Disposition": f'inline; filename="ttsgrab-{replay.history_id}.{fmt}"',
+        },
+    )
+
+
+def _headers(outcome, *, subtitles_url: str | None = None) -> dict[str, str]:
     result = outcome.result
     headers = {
         "X-TTSGrab-Provider": result.provider,
@@ -139,6 +220,23 @@ def _headers(outcome) -> dict[str, str]:
         headers["X-TTSGrab-History-Id"] = outcome.history_id
     if result.unsupported:
         headers["X-TTSGrab-Unsupported"] = ",".join(result.unsupported)
+    # "Degraded" means: a fallback served this, and that fallback is a weaker engine than
+    # the one the policy actually picked. The existing X-TTSGrab-Fallback says *that* a
+    # substitution happened; this says whether it cost you quality, which is the part a
+    # caller can act on — re-requesting later, or telling the user why it sounds different.
+    # The yardstick is the explicit request if there was one, otherwise the policy's own
+    # top pick — "you asked for best_quality and got a free engine" is degradation even
+    # though you never named a provider.
+    requested = outcome.meta.get("requested_provider") or outcome.meta.get("primary_choice")
+    if outcome.meta.get("fallback_used") and requested and requested != result.provider:
+        scores = outcome.meta.get("quality_scores") or {}
+        if scores:
+            served_score = scores.get(result.provider, 0.5)
+            wanted_score = scores.get(requested, 0.5)
+            if served_score < wanted_score:
+                headers["X-TTSGrab-Degraded"] = "true"
+    if subtitles_url:
+        headers["X-TTSGrab-Subtitles-Url"] = subtitles_url
     if outcome.meta.get("fallback_used"):
         headers["X-TTSGrab-Fallback"] = (
             f"{outcome.meta.get('requested_provider')}->{result.provider}"

@@ -109,6 +109,10 @@ class SynthRequest(BaseModel):
     language: str | None = None
     reference_audio_id: str | None = None
     strict: bool = False  # raise on unsupported params instead of degrading
+    # EBU R128 target, already resolved to LUFS by the API layer.
+    loudness: float | None = None
+    # Force sentence-level splitting even for short text, so subtitle timings exist.
+    want_segments: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
 
     def cache_key(self) -> str:
@@ -133,6 +137,14 @@ class SynthRequest(BaseModel):
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+class SpeechSegment(BaseModel):
+    """One synthesised span, positioned in the final audio."""
+
+    text: str
+    start_ms: int
+    end_ms: int
+
+
 class SynthResult(BaseModel):
     """What comes back from a provider."""
 
@@ -154,6 +166,10 @@ class SynthResult(BaseModel):
     first_byte_ms: int | None = None
     from_cache: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
+    # Per-segment timing, filled in when the text had to be split. Subtitle generation
+    # needs it, and it is measured anyway during synthesis — discarding it would mean
+    # re-measuring every chunk just to emit an SRT.
+    segments: list[SpeechSegment] = Field(default_factory=list)
 
 
 class ProviderStatus(BaseModel):

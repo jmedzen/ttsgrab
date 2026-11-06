@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, func, select
 
 from ttsgrab.api.deps import Ctx, PrincipalDep
@@ -81,6 +81,50 @@ async def history_audio(record_id: str, ctx: Ctx, principal: PrincipalDep) -> Fi
         "flac": "audio/flac",
     }.get(fmt, "application/octet-stream")
     return FileResponse(path, media_type=mime, filename=f"{record_id}.{fmt}")
+
+
+@router.get(
+    "/v1/history/{record_id}/subtitles.{fmt}",
+    summary="Subtitles for a historical synthesis",
+    response_class=Response,
+)
+async def history_subtitles(
+    record_id: str, fmt: str, ctx: Ctx, principal: PrincipalDep
+) -> Response:
+    """Render SRT or WebVTT from the timings stored with the record.
+
+    Derived on read rather than stored rendered, so both formats come from one measurement
+    and a future format needs no migration.
+    """
+    from ttsgrab.core.subtitles import render
+
+    if fmt not in ("srt", "vtt"):
+        raise NotFound(f"unknown subtitle format {fmt!r}; use srt or vtt")
+    async with session_scope() as session:
+        row = await session.get(SynthRecord, record_id)
+        if row is None:
+            raise NotFound(f"no history record {record_id}")
+        raw = list(row.segments or [])
+    if not raw:
+        # Single-chunk text has no internal timing. Say so clearly instead of emitting an
+        # empty file that looks like a bug in the caller's pipeline.
+        raise NotFound(
+            f"record {record_id} has no segment timing (the text was not split); "
+            "subtitles require multi-sentence input"
+        )
+    from ttsgrab.core.types import SpeechSegment
+
+    segments = [SpeechSegment(**s) for s in raw]
+    text = render(segments, fmt)
+    mime = "application/x-subrip" if fmt == "srt" else "text/vtt"
+    return Response(
+        content=text,
+        media_type=mime,
+        headers={
+            "Content-Disposition": f'attachment; filename="{record_id}.{fmt}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/v1/history/{record_id}", summary="Delete a history record and its audio")

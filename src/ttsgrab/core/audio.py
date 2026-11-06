@@ -259,3 +259,209 @@ def sniff_format(data: bytes) -> AudioFormat | None:
     if data[:4] == b"fLaC":
         return AudioFormat.FLAC
     return None
+
+
+# -- loudness normalisation -------------------------------------------------------------
+
+# EBU R128 targets. The numbers are not arbitrary: -16 LUFS is the podcast/mobile-listening
+# convention, -14 is what Spotify and YouTube normalise toward, and -23 LUFS is the
+# broadcast standard (ITU-R BS.1770 / ATSC A/85). Giving the caller a named choice rather
+# than a free-form number keeps them out of the business of guessing.
+LOUDNESS_TARGETS: dict[str, float] = {
+    "podcast": -16.0,
+    "streaming": -14.0,
+    "broadcast": -23.0,
+}
+
+# True peak ceiling. 1.0 dBTP of headroom below digital full scale: lossy encoders such as
+# libmp3lame overshoot the sample peaks they were given, and a file mastered to exactly
+# 0 dBFS clips once encoded.
+DEFAULT_TRUE_PEAK_DB = -1.5
+
+# Below this, a single-pass measurement is not trustworthy enough to derive gain from.
+MIN_MEASURABLE_MS = 250
+
+
+def resolve_loudness_target(value: str | float | None) -> float | None:
+    """Accept a preset name or an explicit LUFS number."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        lufs = float(value)
+    else:
+        key = value.strip().lower()
+        if key in LOUDNESS_TARGETS:
+            return LOUDNESS_TARGETS[key]
+        try:
+            lufs = float(key)
+        except ValueError:
+            raise InvalidRequest(
+                f"unknown loudness target {value!r}; "
+                f"use one of {sorted(LOUDNESS_TARGETS)} or a number in LUFS",
+                param="loudness",
+            ) from None
+    if not -40.0 <= lufs <= -5.0:
+        # Outside this band the result is either inaudible or a distorted mess; refusing is
+        # more useful than producing it.
+        raise InvalidRequest(
+            f"loudness target {lufs} LUFS is outside the supported range -40..-5",
+            param="loudness",
+        )
+    return lufs
+
+
+def _loudnorm_filter(target: float, true_peak: float) -> str:
+    return f"loudnorm=I={target}:TP={true_peak}:LRA=11:print_format=json"
+
+
+async def _measure_loudness(
+    audio: bytes, fmt: AudioFormat, target: float, tp: float
+) -> dict | None:
+    """First pass of ffmpeg's two-pass loudnorm, returning the measured summary.
+
+    Single-pass `loudnorm` is a dynamic filter: it rides the gain and audibly pumps on
+    speech that has natural pauses. The two-pass form measures first, then applies one
+    static gain, which is what you want for narration.
+    """
+    ffmpeg = ffmpeg_path()
+    if ffmpeg is None:
+        return None
+    args = [
+        ffmpeg,
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        "pipe:0",
+        "-af",
+        _loudnorm_filter(target, tp),
+        "-f",
+        "null",
+        "-",
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _out, err = await proc.communicate(audio)
+    if proc.returncode != 0:
+        return None
+    # ffmpeg prints the JSON block to stderr after the filter runs.
+    text = err.decode("utf-8", "replace")
+    start = text.rfind("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    import json as _json
+
+    try:
+        data = _json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+    # Very short or silent input makes these non-numeric (`-inf`), which the second pass
+    # cannot use.
+    for field in ("input_i", "input_tp", "input_lra", "input_thresh"):
+        try:
+            float(data[field])
+        except (KeyError, TypeError, ValueError):
+            return None
+    return data
+
+
+async def normalize_loudness(
+    audio: bytes,
+    *,
+    fmt: AudioFormat,
+    target_lufs: float,
+    true_peak_db: float = DEFAULT_TRUE_PEAK_DB,
+    sample_rate: int | None = None,
+    bitrate: str | None = None,
+) -> bytes:
+    """Normalise to an EBU R128 integrated loudness target.
+
+    Raises rather than returning the input unchanged: a caller who asked for -16 LUFS and
+    silently got the original audio would ship a mix that is wrong in a way nothing warns
+    about.
+    """
+    ffmpeg = ffmpeg_path()
+    if ffmpeg is None:
+        raise AudioProcessingError(
+            "ffmpeg is not installed; loudness normalisation needs it. "
+            "Install ffmpeg or omit the loudness parameter.",
+        )
+    measured = await _measure_loudness(audio, fmt, target_lufs, true_peak_db)
+    if measured is None:
+        raise AudioProcessingError(
+            "could not measure the loudness of this audio (too short or silent); "
+            "omit the loudness parameter for this input",
+        )
+    flt = (
+        f"loudnorm=I={target_lufs}:TP={true_peak_db}:LRA=11:"
+        f"measured_I={measured['input_i']}:"
+        f"measured_TP={measured['input_tp']}:"
+        f"measured_LRA={measured['input_lra']}:"
+        f"measured_thresh={measured['input_thresh']}:"
+        "linear=true:print_format=summary"
+    )
+    container, codec_argv = _CODEC_ARGS[fmt]
+    args = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        "pipe:0",
+        "-af",
+        flt,
+        *codec_argv(_rate_args(sample_rate), bitrate),
+        "-f",
+        container,
+        "pipe:1",
+    ]
+    out = await _run_ffmpeg(args, audio)
+    if not out:
+        raise AudioProcessingError("loudness normalisation produced no audio")
+    return out
+
+
+async def measure_integrated_lufs(audio: bytes, fmt: AudioFormat) -> float | None:
+    """Measure integrated loudness without changing the audio.
+
+    Exposed so tests and the A/B page can show how far apart two providers really are,
+    rather than asserting that normalisation "worked".
+    """
+    ffmpeg = ffmpeg_path()
+    if ffmpeg is None:
+        return None
+    args = [
+        ffmpeg,
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        "pipe:0",
+        "-af",
+        "loudnorm=print_format=json",
+        "-f",
+        "null",
+        "-",
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _o, err = await proc.communicate(audio)
+    if proc.returncode != 0:
+        return None
+    text = err.decode("utf-8", "replace")
+    start, end = text.rfind("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    import json as _json
+
+    try:
+        return float(_json.loads(text[start : end + 1])["input_i"])
+    except (KeyError, TypeError, ValueError):
+        return None

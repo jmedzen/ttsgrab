@@ -160,6 +160,94 @@ Traditional Chinese is normalised to Simplified plus a Taiwan pronunciation dict
 `longform.max_concurrency`, then joined with ffmpeg. The response is a single file; nothing
 about the splitting is visible to the caller except the latency.
 
+### Loudness normalisation
+
+```json
+{"text": "…", "voice": "zh-TW-HsiaoChenNeural", "loudness": "podcast"}
+```
+
+Different providers deliver wildly different levels — measured on this deployment, Edge
+came back at **−18.6 LUFS**. Mixing two engines in one project without normalising makes
+the listener reach for the volume control. `loudness` applies EBU R128 two-pass
+normalisation and returns the file at a consistent level:
+
+| Value | Target | Use |
+|---|---|---|
+| `podcast` | −16 LUFS | speech-first content, mobile listening |
+| `streaming` | −14 LUFS | what Spotify and YouTube normalise toward |
+| `broadcast` | −23 LUFS | EBU R128 / ATSC A&85 delivery |
+| number | any −40…−5 | explicit integrated loudness |
+
+True peak is held at −1.5 dBTP to leave headroom for lossy encoders, which overshoot the
+peaks they are given. Two-pass rather than single-pass: the dynamic form rides the gain and
+audibly pumps on speech with natural pauses.
+
+The response reports `"transcoded": ["loudness"]`. Requires ffmpeg; without it the request
+fails with an explanation rather than silently returning un-normalised audio.
+
+### Subtitles
+
+```json
+{"text": "第一句。第二句。", "voice": "zh-TW-HsiaoChenNeural",
+ "response": "json", "subtitles": "srt"}
+```
+
+Long-text synthesis already measures every sentence's duration, so timed subtitles cost
+nothing extra. `subtitles` accepts `srt` or `vtt` and forces sentence-level splitting even
+for short input.
+
+The JSON response carries `subtitles` inline plus `subtitles_url`, which stays fetchable
+afterwards:
+
+```
+GET /v1/history/{id}/subtitles.srt
+GET /v1/history/{id}/subtitles.vtt
+```
+
+Cue text keeps **your** characters. Synthesis normalises zh-TW to zh-CN internally, but
+shipping Simplified glyphs under a Traditional audio track would be visibly wrong, so the
+original sentence is matched back positionally. If the two splits disagree on sentence
+count the measured text is kept — a wrong pairing is worse than wrong glyphs.
+
+Cues shorter than 700 ms are merged into the next one; a single-frame cue reads as a flash.
+For audio responses the URL is in the `X-TTSGrab-Subtitles-Url` header. Asking for
+subtitles on text too short to split is a `400`, not an empty file.
+
+### Idempotency
+
+```
+Idempotency-Key: 8f14e45f-ceea-467f-a8d6-…
+```
+
+A retried request must not bill twice — for a free key with a ten-request daily allowance,
+or for a billed provider, a duplicate is real loss. With this header set:
+
+- the first request runs normally and records its result;
+- a repeat with the same key and the same body replays the stored audio
+  (`X-TTSGrab-Idempotent-Replay: true`, same `X-TTSGrab-History-Id`) at zero cost;
+- a repeat with the same key but a **different** body is a `400` — returning audio for text
+  the caller did not send would be worse than failing.
+
+Keys are scoped per API key and retained for 24 hours. Replay reads the file from disk; if
+it was deleted you get `404`, because silently re-synthesising would defeat the point.
+
+### Provenance in the file
+
+Every mp3 and flac carries its own origin, so a file that outlives the gateway is still
+attributable:
+
+```
+$ ffprobe -show_entries format_tags out.mp3
+artist  : edge
+album   : ttsgrab
+title   : 心經
+comment : provider=edge voice=zh-TW-HsiaoChenNeural tier=neural chars=341
+```
+
+Written with `ffmpeg -c copy`, so the audio stream is bit-identical — verified by comparing
+the stream MD5 before and after tagging. Disable with `TTSGRAB_WRITE_METADATA=false`. Opus
+and WAV are deliberately not tagged rather than half-supported.
+
 ---
 
 ## `POST /v1/tts/stream`

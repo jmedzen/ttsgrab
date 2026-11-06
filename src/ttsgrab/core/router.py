@@ -303,8 +303,12 @@ class Orchestrator:
                 "requested_provider": req.provider,
                 "used_provider": name,
                 "fallback_used": name != (req.provider or order[0]),
+                "primary_choice": req.provider or order[0],
                 "attempts": attempts,
                 "tier": result.extra.get("tier") or self._tier_for(provider, req),
+                # Carried through so the response layer can say whether a fallback was
+                # merely *different* or actually *worse*.
+                "quality_scores": self.settings.router.quality_scores,
             }
             return result, meta
 

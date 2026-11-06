@@ -18,7 +18,7 @@ from ttsgrab.core.context import AppContext
 from ttsgrab.core.errors import InvalidRequest, TextTooLong, UnsupportedParam
 from ttsgrab.core.router import Policy
 from ttsgrab.core.textsplit import estimate_speech_seconds, plan_text
-from ttsgrab.core.types import SynthRequest, SynthResult
+from ttsgrab.core.types import SpeechSegment, SynthRequest, SynthResult
 from ttsgrab.db.models import SynthRecord
 from ttsgrab.db.session import session_scope
 
@@ -101,7 +101,12 @@ async def synthesize(
         normalize=settings.longform.enabled,
         dictionary=ctx.dictionary,
         # A caller that already split the text wants one chunk out of this call.
-        chunk_threshold=0 if pre_split else settings.longform.chunk_threshold,
+        # A subtitle request needs per-sentence timing, and short text would otherwise be
+        # sent as one chunk and have none. Forcing the split makes every sentence a
+        # separately measured unit at the cost of one extra request per sentence.
+        chunk_threshold=0
+        if (pre_split or req.want_segments)
+        else settings.longform.chunk_threshold,
         max_sentence_chars=settings.longform.max_sentence_chars,
         target_language=language,
     )
@@ -217,7 +222,32 @@ async def synthesize(
         )
 
         merged = await concat(parts, result.format)
-        result = result.model_copy(update={"audio": merged})
+        # Accumulate each chunk's duration so subtitle timings come out of measurements we
+        # already have, rather than a second pass over the joined audio.
+        segments: list[SpeechSegment] = []
+        cursor = 0
+        for (r, _m), chunk_text in zip(results, plan.chunks, strict=False):
+            seg_ms = r.duration_ms or await probe_duration_ms(r.audio, r.format) or 0
+            segments.append(SpeechSegment(text=chunk_text, start_ms=cursor, end_ms=cursor + seg_ms))
+            cursor += seg_ms
+        # The cue text should be what the caller wrote, not the Simplified form the
+        # provider needed. Split the original the same way and pair positionally.
+        if req.want_segments and req.text != plan.normalized:
+            try:
+                original_plan = plan_text(
+                    req.text,
+                    normalize=False,
+                    dictionary=None,
+                    chunk_threshold=0,
+                    max_sentence_chars=settings.longform.max_sentence_chars,
+                    target_language=req.language,
+                )
+                from ttsgrab.core.subtitles import restore_original_text
+
+                segments = restore_original_text(segments, original_plan.chunks)
+            except Exception:
+                pass
+        result = result.model_copy(update={"audio": merged, "segments": segments})
         # Chunks share the first result's format assumptions; re-probe the join.
         result = result.model_copy(update={"duration_ms": None})
 
@@ -250,6 +280,50 @@ async def synthesize(
             }
         )
         transcoded.append("sample_rate")
+    # --- loudness normalisation ---------------------------------------------------------
+    # Runs after format/sample-rate conversion so it only ever encodes once per change.
+    if req.loudness is not None:
+        from ttsgrab.core.audio import normalize_loudness, resolve_loudness_target
+
+        target = resolve_loudness_target(req.loudness)
+        if target is not None:
+            result = result.model_copy(
+                update={
+                    "audio": await normalize_loudness(
+                        result.audio,
+                        fmt=result.format,
+                        target_lufs=target,
+                        sample_rate=req.sample_rate,
+                    ),
+                    # Duration changes by a few ms and the join was re-probed above, so
+                    # re-measure rather than trusting the pre-normalisation value.
+                    "duration_ms": None,
+                }
+            )
+            transcoded.append("loudness")
+
+    # --- provenance ---------------------------------------------------------------------
+    # Tagged last, so the tags describe the audio that actually ships (after any transcode
+    # or normalisation). ffmpeg copies the stream, so this never costs quality.
+    if settings.write_metadata:
+        from ttsgrab.core.provenance import embed_provenance
+
+        result = result.model_copy(
+            update={
+                "audio": await embed_provenance(
+                    result.audio,
+                    fmt=result.format,
+                    payload={
+                        "provider": result.provider,
+                        "voice": result.voice_id,
+                        "tier": str(meta.get("tier") or ""),
+                        "title": text[:200],
+                        "chars": str(result.billed_characters or len(text)),
+                    },
+                )
+            }
+        )
+
     if transcoded:
         result = result.model_copy(update={"transcoded": sorted(set(transcoded))})
 
@@ -390,6 +464,7 @@ async def _persist(
                     "normalized_text": normalized if normalized != req.text else None,
                     "fallback": meta.get("fallback_used"),
                     "attempts": meta.get("attempts"),
+                    "loudness": req.loudness,
                 },
                 format=result.format.value,
                 sample_rate=result.sample_rate,
@@ -398,6 +473,7 @@ async def _persist(
                 duration_ms=duration_ms,
                 latency_ms=result.latency_ms,
                 first_byte_ms=result.first_byte_ms,
+                segments=[seg.model_dump() for seg in (result.segments or [])],
                 from_cache=result.from_cache,
                 unsupported=result.unsupported,
                 cost_micro_usd=result.cost_micro_usd,

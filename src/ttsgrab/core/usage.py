@@ -86,6 +86,7 @@ class UsageLedger:
             "by_provider": {k: v for k, v in sorted(by_provider.items())},
             "free_tier": await self.free_tier_status(session, by_provider, now),
             "budgets": self.budget_status(by_provider),
+            "runway": self.runway_status(by_provider, start, end, now),
         }
 
     async def provider_chars_this_month(
@@ -135,6 +136,36 @@ class UsageLedger:
                     "remaining": remaining,
                     "used_pct": round(used / spec.free_chars_per_month * 100, 1),
                 }
+            )
+        return out
+
+    def runway_status(
+        self,
+        by_provider: dict[str, dict[str, Any]],
+        start: dt.datetime,
+        end: dt.datetime,
+        now: dt.datetime | None = None,
+    ) -> dict[str, Any]:
+        """Per-provider projection of when the monthly allowance runs out."""
+        now = now or dt.datetime.now(dt.UTC)
+        # Days actually elapsed, floored at a fraction of a day: dividing by a value near
+        # zero on the 1st of the month would extrapolate a single request into an absurd
+        # daily rate.
+        elapsed = max(1 / 24, (now - start).total_seconds() / 86400)
+        days_in_period = max(1.0, (end - start).total_seconds() / 86400)
+        cfg = self.settings
+        budgets = {
+            "google_cloud": cfg.google_cloud.monthly_budget_chars,
+            "google_ai_studio": cfg.google_ai_studio.monthly_budget_chars,
+        }
+        out: dict[str, Any] = {}
+        for provider, budget in budgets.items():
+            used = int(by_provider.get(provider, {}).get("characters", 0))
+            out[provider] = project_runway(
+                budget=int(budget or 0),
+                used=used,
+                elapsed_days=elapsed,
+                days_in_period=days_in_period,
             )
         return out
 
@@ -317,3 +348,42 @@ class UsageLedger:
             bucket["cost_micro_usd"] += cost_micro
             bucket["providers"][str(provider)] = char_count
         return list(out.values())
+
+
+def project_runway(
+    *,
+    budget: int,
+    used: int,
+    elapsed_days: float,
+    days_in_period: float = 30.0,
+) -> dict[str, Any]:
+    """How long the remaining allowance lasts at the current burn rate.
+
+    A number like "68% used" answers a question nobody asks. The question is "will this
+    last the month?", and the answer needs the rate, not the total.
+
+    Returns ``status`` of:
+      - ``no_budget``    nothing configured; spend is unbounded or free
+      - ``exhausted``    already over
+      - ``no_traffic``   nothing spent yet, so no rate exists to project from
+      - ``ok``           projected to last the period
+      - ``at_risk``      projected to run out before the period ends
+    """
+    if budget <= 0:
+        return {"status": "no_budget", "days_left": None, "daily_rate": None}
+    remaining = max(0, budget - used)
+    if remaining == 0:
+        return {"status": "exhausted", "days_left": 0.0, "daily_rate": None}
+    if used <= 0 or elapsed_days <= 0:
+        return {"status": "no_traffic", "days_left": None, "daily_rate": 0.0}
+    daily_rate = used / elapsed_days
+    if daily_rate <= 0:
+        return {"status": "no_traffic", "days_left": None, "daily_rate": 0.0}
+    days_left = remaining / daily_rate
+    days_remaining_in_period = max(0.0, days_in_period - elapsed_days)
+    return {
+        "status": "ok" if days_left >= days_remaining_in_period else "at_risk",
+        "days_left": round(days_left, 1),
+        "daily_rate": round(daily_rate, 1),
+        "days_remaining_in_period": round(days_remaining_in_period, 1),
+    }

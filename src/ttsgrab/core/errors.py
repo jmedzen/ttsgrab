@@ -87,6 +87,23 @@ class GatewayError(Exception):
         if retryable is not None:
             self.retryable = retryable
 
+    def http_headers(self, request_id: str | None = None) -> dict[str, str]:
+        """Headers this error must carry.
+
+        `Retry-After` is the one that matters. AGENTS.md and docs/api.md both instruct
+        clients to honour it on a 429, and for a long time the gateway only put the delay
+        in the JSON body — so a client that followed the documentation waited for a header
+        that never arrived, and one that only read the body worked by accident.
+        """
+        headers: dict[str, str] = {}
+        if request_id:
+            headers["X-Request-Id"] = request_id
+        if self.code is ErrorCode.RATE_LIMITED:
+            seconds = self.details.get("retry_after_seconds")
+            if isinstance(seconds, int) and seconds > 0:
+                headers["Retry-After"] = str(seconds)
+        return headers
+
     def to_body(self, request_id: str | None = None) -> ErrorBody:
         return ErrorBody(
             code=self.code,

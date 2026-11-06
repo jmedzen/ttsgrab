@@ -19,7 +19,7 @@ from ttsgrab.core.router import Orchestrator
 from ttsgrab.core.security import SlidingWindowLimiter
 from ttsgrab.core.textsplit import PronunciationDictionary
 from ttsgrab.core.usage import UsageLedger
-from ttsgrab.db.session import create_all, init_engine, session_factory
+from ttsgrab.db.session import create_all, ensure_columns, init_engine, session_factory
 from ttsgrab.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -86,6 +86,11 @@ async def build_context(settings: Settings, *, config_dir: Path | None = None) -
 
     init_engine(settings.database_url)
     await create_all()
+    # create_all() does not add columns to existing tables; do that before anything queries
+    # them, or an upgraded install fails with "no such column" on its first synthesis.
+    added_columns = await ensure_columns()
+    if added_columns:
+        logging.getLogger(__name__).info("schema upgraded in place: %s", ", ".join(added_columns))
 
     registry = ProviderRegistry(settings)
     registry.build()

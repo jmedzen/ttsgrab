@@ -186,7 +186,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=exc.http_status,
             content=ErrorEnvelope(error=body).model_dump(mode="json"),
-            headers={"X-Request-Id": request_id_var.get()},
+            headers=exc.http_headers(request_id_var.get()),
         )
 
     @app.exception_handler(RequestValidationError)

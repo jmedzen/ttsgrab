@@ -72,3 +72,44 @@ async def client(app):
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def stub_app(settings):
+    """An app with a deterministic offline provider.
+
+    End-to-end features (idempotency, subtitles, loudness, provenance) only fail at the
+    seams of the whole pipeline, so they need real synthesis. `edge` needs the internet,
+    which CI does not reliably have; the stub returns real WAV audio instead.
+    """
+    import sys
+    from pathlib import Path as _P
+
+    sys.path.insert(0, str(_P(__file__).parent))
+    from stub_provider import StubProvider
+    from ttsgrab.main import create_app
+
+    application = create_app(settings)
+    async with application.router.lifespan_context(application):
+        ctx = application.state.ctx
+        stub = StubProvider(ctx.settings)
+        ctx.registry.add_instance(stub)
+        # Make it reachable by policy routing and by name.
+        ctx.settings.router.fallback_chain = ["stub"]
+        await stub.refresh_voices()
+        yield application
+
+
+@pytest_asyncio.fixture
+async def stub_client(stub_app, settings):
+    import httpx
+    from httpx import ASGITransport
+
+    token = settings.security.admin_token or "test-admin"
+    transport = ASGITransport(app=stub_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as c:
+        yield c
