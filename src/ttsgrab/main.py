@@ -260,7 +260,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             logging.getLogger("ttsgrab").exception("failed to mount the MCP server")
 
-    @app.get("/healthz", tags=["ops"], summary="Liveness")
+    @app.api_route("/healthz", tags=["ops"], summary="Liveness", methods=["GET", "HEAD"])
     async def healthz() -> dict[str, Any]:
         # Kept flat and additive: existing callers read `version`, and adding `build`
         # alongside it does not break them.
@@ -352,14 +352,74 @@ def _mount_web(app: FastAPI) -> None:
 
     assets = dist / "assets"
     if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
-    @app.get("/", include_in_schema=False)
-    async def _index() -> Response:
-        return Response((dist / "index.html").read_text(encoding="utf-8"), media_type="text/html")
+        class _HashedAssets(StaticFiles):
+            """Every file here has a content hash in its name, so it can live in the
+            browser cache indefinitely — a changed file arrives under a new name.
+
+            StaticFiles sends no Cache-Control by default, which makes the browser guess.
+            Guessing wrong in the permissive direction is how a rebuilt bundle keeps
+            serving stale JS after a deploy.
+            """
+
+            async def get_response(self, path, scope):
+                response = await super().get_response(path, scope)
+                if response.status_code == 200:
+                    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                return response
+
+        app.mount("/assets", _HashedAssets(directory=assets), name="assets")
+
+    def _html(text: str, request: Request | None = None) -> Response:
+        """index.html must never be cached.
+
+        Its whole job is to name the content-hashed bundle. A cached copy keeps pointing at
+        the previous build's filename, so an upgraded deployment serves new JS that the
+        browser never asks for — the user sees an unchanged UI and concludes the feature
+        does not exist. `no-cache` means revalidate (cheap: an ETag 304), not "do not
+        store", which is what we want.
+        """
+        # A weak ETag over the bytes: `no-cache` forces revalidation on every load, and
+        # this is what makes that revalidation a 304 instead of a full re-download.
+        #
+        # Starlette's Response does not evaluate If-None-Match itself, so the comparison is
+        # explicit. Skipping it would make `no-cache` mean "download the whole page every
+        # time" — correct but wasteful.
+        import hashlib
+
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+        etag = f'W/"{digest}"'
+        if request is not None:
+            inm = request.headers.get("if-none-match", "")
+            if etag in inm or inm.strip() == "*":
+                return Response(
+                    status_code=304,
+                    headers={
+                        "Cache-Control": "no-cache, must-revalidate",
+                        "ETag": etag,
+                        "X-TTSGrab-Build": build_info().label(),
+                    },
+                )
+        return Response(
+            text,
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-cache, must-revalidate",
+                "ETag": etag,
+                # No content hash in the filename, so the build is what changes between
+                # deploys — handy when someone reports "I still see the old UI".
+                "X-TTSGRab-Build": build_info().label(),
+            },
+        )
+
+    # HEAD alongside GET: FastAPI does not add it automatically, and uptime monitors and
+    # load-balancer health checks probe with HEAD. A 405 there looks like a dead service.
+    @app.api_route("/", include_in_schema=False, methods=["GET", "HEAD"])
+    async def _index(request: Request) -> Response:
+        return _html((dist / "index.html").read_text(encoding="utf-8"), request)
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    async def _spa(full_path: str) -> Response:
+    async def _spa(full_path: str, request: Request) -> Response:
         # Never swallow API routes.
         if full_path.startswith(
             (
@@ -377,8 +437,17 @@ def _mount_web(app: FastAPI) -> None:
             return JSONResponse({"error": {"code": "not_found"}}, status_code=404)
         candidate = dist / full_path
         if candidate.is_file():
-            return Response(candidate.read_bytes(), media_type=_guess_type(full_path))
-        return Response((dist / "index.html").read_text(encoding="utf-8"), media_type="text/html")
+            # Everything Vite emits under /assets carries a content hash in its name, so it
+            # can be cached indefinitely; a changed file gets a new name.
+            headers = (
+                {"Cache-Control": "public, max-age=31536000, immutable"}
+                if full_path.startswith("assets/")
+                else {"Cache-Control": "no-cache"}
+            )
+            return Response(
+                candidate.read_bytes(), media_type=_guess_type(full_path), headers=headers
+            )
+        return _html((dist / "index.html").read_text(encoding="utf-8"), request)
 
 
 def _guess_type(path: str) -> str:

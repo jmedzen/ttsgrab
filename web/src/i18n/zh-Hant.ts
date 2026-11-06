@@ -86,6 +86,10 @@ const zhHant: Translation = {
     duration: '音長',
     noTargets: '請至少新增一個比較對象。',
   },
+  app: {
+    staleBundle: '這個頁面執行的是舊版（{{theirs}}）—',
+    reload: '重新載入',
+  },
   favourites: {
     add: '加入最愛',
     saved: '已加入最愛',

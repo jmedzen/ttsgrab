@@ -84,6 +84,10 @@ const en = {
     duration: 'Duration',
     noTargets: 'Add at least one target to compare.',
   },
+  app: {
+    staleBundle: 'This page is running an older build ({{theirs}}) —',
+    reload: 'reload',
+  },
   favourites: {
     add: 'Add to favourites',
     saved: 'In favourites',

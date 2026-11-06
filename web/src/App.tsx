@@ -40,6 +40,13 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [build, setBuild] = useState<BuildInfo | null>(null)
 
+  // Compare what this bundle was compiled from against what the server is running. A
+  // mismatch means the browser loaded a cached index.html pointing at an older JS file —
+  // worth saying, because otherwise a shipped feature looks absent.
+  const stale =
+    build?.build != null && __BUNDLE_BUILD__ !== 'dev' &&
+    !__BUNDLE_BUILD__.startsWith(`${build.build}+`)
+
   useEffect(() => {
     // A failed lookup must not break the UI; the footer simply omits the build.
     api.buildInfo().then(setBuild).catch(() => setBuild(null))
@@ -154,6 +161,17 @@ export default function App() {
               {build.dirty && ' · dirty'}
             </span>
           </>
+        )}
+        {/* The server's build number can differ from the bundle's: a cached index.html
+            keeps loading an old JS file while /healthz already reports the new deploy.
+            Saying so is the difference between "the feature is missing" and "reload". */}
+        {build && stale && (
+          <span className="ml-2 rounded bg-warn/15 px-1.5 py-0.5 text-warn" data-testid="stale-bundle">
+            {t('app.staleBundle', { theirs: __BUNDLE_BUILD__ })}
+            <button type="button" className="ml-1 underline" onClick={() => window.location.reload()}>
+              {t('app.reload')}
+            </button>
+          </span>
         )}
       </footer>
     </div>
