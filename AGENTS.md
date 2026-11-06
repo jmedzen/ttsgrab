@@ -104,6 +104,8 @@ produce can be audited by whoever receives it.
 | GET | `/v1/usage` | This month's characters and cost per provider |
 | GET | `/v1/history` | Past syntheses, replayable |
 | GET/POST/DELETE | `/v1/providers/google_ai_studio/keys` | **Admin only.** Manage free/paid Google AI Studio keys |
+| GET | `/v1/favourites` | The operator's starred voices (server-side, shared by every client) |
+| GET/PUT | `/v1/settings` | **Admin only.** Read effective config (secrets masked) / write `config.yaml` |
 | — | `/mcp` | MCP tools: `synthesize_speech`, `list_voices`, `list_providers`, `get_usage` |
 | GET | `/healthz` | Liveness **and the build number** — quote it in bug reports |
 | — | `/llms.txt`, `/agents.md` | This document, machine-readable |
@@ -151,7 +153,10 @@ has **no** zh-TW voice. Kokoro's Mandarin is weak — its own authors grade it "
 
 ## MCP
 
-If you are an MCP client, mount `http://localhost:8300/mcp/` and use:
+If you are an MCP client, mount `http://localhost:8300/mcp/` with
+`Authorization: Bearer <TTSGRAB_MCP_TOKEN>` — the transport rejects requests without it, and
+the gateway refuses to mount it at all when no token is configured, because its tools spend
+money. Use:
 
 - `synthesize_speech({text, voice, format?, speed?, provider?, policy?})`
 - `list_voices({language?, provider?, free_only?, limit?})`
@@ -160,3 +165,16 @@ If you are an MCP client, mount `http://localhost:8300/mcp/` and use:
 
 Call `list_voices` before `synthesize_speech`. Every time — the catalogue depends on which
 credentials the operator has configured.
+
+## Limits on your key
+
+Three things are applied per key, not per gateway, and they apply to **every** synthesis
+surface (`/v1/tts`, `/v1/tts/stream`, `/v1/compare`, `/v1/jobs`, `/v1/audio/speech`):
+
+- **Provider allowlist** — if your key has one, you must send `provider`. Omitting it is an
+  error rather than a shortcut, because only a named provider can be checked before routing.
+- **Monthly character quota** — a `402 quota_exceeded` before any synthesis, so a rejected
+  request costs nothing.
+- **Rate limit** — `429` with `Retry-After`.
+
+`/v1/history` shows only rows your key created; another key's record id returns `404`.

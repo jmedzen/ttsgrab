@@ -541,7 +541,63 @@ you got instead of lying.
 | `GET /v1/usage/free-tier` | Remaining free characters per provider/tier |
 | `GET /v1/stats` | Dashboard aggregates: counts, cache hit rate, top voices |
 
+History is scoped to the key that created it. A key sees only its own rows; the admin token
+sees all of them. Requesting another key's record returns **404**, not 403 — a 403 would
+confirm that the id exists.
+
 ---
+
+## Favourites
+
+The starred voices in the UI. Stored server-side so they survive a browser change and show up
+on any device.
+
+| Endpoint | Notes |
+|---|---|
+| `GET /v1/favourites` | `{favourites: [{voice_id, provider, name, position, created_at}]}` |
+| `POST /v1/favourites` | Body `{voice_id, provider?, name?}`. Idempotent; returns `created` |
+| `DELETE /v1/favourites/{voice_id}` | Idempotent; returns `removed` |
+| `PUT /v1/favourites/order` | Body `{voice_ids: [...]}` — rejects ids that are not favourited |
+
+Capped at **24**. `provider` and `name` are stored alongside the id so a favourite whose
+provider is disabled still renders as a name rather than a raw id.
+
+## Settings
+
+The configuration the service is actually running, and the writer behind `/settings`.
+
+```bash
+curl -s localhost:8300/v1/settings -H 'Authorization: Bearer '$TOKEN
+```
+
+```json
+{
+  "path": "config.yaml",
+  "exists": true,
+  "values": {"google_cloud.api_key": "••••1234", "router.default_policy": "cheapest"},
+  "on_disk": {"router": {"default_policy": "cheapest"}},
+  "env_overrides": [{"key": "router.default_policy", "env_var": "TTSGRAB_ROUTER__DEFAULT_POLICY"}],
+  "editable": {"router.default_policy": "str"}
+}
+```
+
+**Admin only.** Secrets come back masked as `••••` plus the last four characters — enough to
+tell two keys apart, not enough to use. The mask is never a value: sending it back would
+replace a real key with `••••1234`, so the UI leaves those fields empty and shows the mask as
+a placeholder.
+
+`PUT /v1/settings` takes `{"values": {"<dotted.key>": <value>}}`:
+
+* unknown keys are **refused**, with the full editable list in `error.details` — a typo must
+  not silently write a key nothing reads;
+* a value of the wrong type is refused, not coerced (`"yes"` for an int is not `0`);
+* the file is written atomically, mode `0600`, and **comments survive** — the comments in
+  `config.example.yaml` are the documentation for every option;
+* `{"values": {"router.default_policy": null}}` removes the key.
+
+The response carries `restart_required: true`. Provider keys and switches take effect after a
+restart; `port` and `database_url` need one regardless. `env_overrides` lists keys shadowed by
+a `TTSGRAB_*` variable, because saving the file does not change what the running process uses.
 
 ## Workers
 
@@ -625,6 +681,11 @@ Mounted at `/mcp` (streamable HTTP) when the `mcp` extra is installed.
 ```
 
 Tools: `synthesize_speech` · `list_voices` · `list_providers` · `get_usage`.
+
+**The mount requires a bearer token.** Set `TTSGRAB_MCP_TOKEN` (or an admin token) and send
+`Authorization: Bearer <token>`. With neither configured, the gateway refuses to mount it at
+all and logs why: its tools spend money, so an open transport is an open wallet. Requests
+without the token get `401` with `WWW-Authenticate: Bearer`.
 
 The trailing slash matters for some clients — the gateway normalises `POST /mcp` to
 `/mcp/`, but a client that resolves paths itself may not.

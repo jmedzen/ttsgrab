@@ -4,8 +4,15 @@
 # TTS alone and reports every other provider as disabled, with a reason.
 #
 # Precedence: built-in defaults → this file → environment variables (env wins).
-# Use this file for structure and non-secret tuning; keep secrets in `.env` or Docker secrets.
 # Point elsewhere with `TTSGRAB_CONFIG=/path/to/config.yaml`.
+#
+# This file is also what the web UI at /settings writes, and it may hold provider API keys:
+# this is a single-tenant gateway, so one known file with mode 0600 is simpler than spreading
+# secrets across .env, the environment and the database. Writes are atomic and preserve every
+# comment below — the comments are the documentation for each option.
+#
+# Environment variables still win. The settings page marks any key they shadow, so a saved
+# value that has no effect is visible rather than assumed.
 #
 # Budget fields live under each provider (`google_cloud.monthly_budget_micro_usd`), because
 # a single global cap cannot express "spend up to $3 on Google but nothing on Gemini".
@@ -92,6 +99,21 @@ cache:
   # Total on-disk budget. LRU by mtime once exceeded.
   max_bytes: 2147483648        # 2 GiB
   ttl_seconds: 2592000         # 30 days
+
+# --------------------------------------------------------------------------------------
+# retention — bounded growth for history, audio and idempotency records
+# --------------------------------------------------------------------------------------
+# Off by default: deleting someone's history is not something an upgrade should start doing
+# on its own. Turn it on and nothing is unbounded any more.
+retention:
+  enabled: false
+  # The newest N rows are always kept, whatever their age. Pruning below the internal floor
+  # is refused, so a typo here cannot empty the history.
+  keep_records: 5000
+  max_age_days: 90
+  idempotency_hours: 24
+  # How often the maintenance pass runs.
+  interval_s: 3600
 
 # --------------------------------------------------------------------------------------
 # long-form synthesis
@@ -190,6 +212,10 @@ mcp:
   # Exposes /mcp with synthesize_speech, list_voices, list_providers, get_usage.
   enabled: true
   path: /mcp
+  # Its tools synthesise speech, so the transport requires a bearer token. Unset falls back
+  # to security.admin_token; with neither, the gateway refuses to mount it and logs why
+  # rather than serving every tool to whoever can reach the port.
+  # token: ""
 
 # --------------------------------------------------------------------------------------
 # process
