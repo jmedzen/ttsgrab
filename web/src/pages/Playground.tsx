@@ -99,7 +99,7 @@ export default function Playground() {
       <section className="card p-5">
         <header className="mb-4">
           <h1 className="text-xl font-semibold">{t('playground.title')}</h1>
-          <p className="text-sm text-ink-500">{t('playground.subtitle')}</p>
+          <p className="text-sm text-muted">{t('playground.subtitle')}</p>
         </header>
 
         <label className="label" htmlFor="text">
@@ -113,15 +113,15 @@ export default function Playground() {
           placeholder={t('playground.textPlaceholder')}
           data-testid="text-input"
         />
-        <div className="mt-1 flex items-center justify-between text-xs text-ink-500">
+        <div className="mt-1 flex items-center justify-between text-xs text-muted">
           <span>
             {text.length} {t('playground.characters')}
           </span>
           <span className="flex gap-2">
-            <button type="button" className="hover:text-accent-500" onClick={() => setText(SAMPLE_ZH)}>
+            <button type="button" className="hover:text-accent" onClick={() => setText(SAMPLE_ZH)}>
               繁中範例
             </button>
-            <button type="button" className="hover:text-accent-500" onClick={() => setText(SAMPLE_EN)}>
+            <button type="button" className="hover:text-accent" onClick={() => setText(SAMPLE_EN)}>
               EN sample
             </button>
           </span>
@@ -157,13 +157,16 @@ export default function Playground() {
             <VoiceSelect
               value={voice}
               onChange={(v) => setVoice(v.voice_id)}
+              // Restricting the list to the chosen provider keeps the two controls
+              // consistent; the picker also re-selects a valid voice when this changes.
+              filterProvider={provider || null}
               ariaLabelledBy="voice-label"
             />
           </div>
         </div>
 
         {activeProvider && !activeProvider.official && (
-          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <p className="mt-3 rounded-lg border border-warn/45 bg-warn/10 px-3 py-2 text-xs text-warn bg-warn/15">
             ⚠ {t('playground.warnUnofficial')} {t('playground.warnTos')}
             {activeProvider.tos_url && (
               <>
@@ -234,26 +237,26 @@ export default function Playground() {
 
         <button
           type="button"
-          className="mt-4 text-xs text-ink-500 underline hover:text-accent-500"
+          className="mt-4 text-xs text-muted underline hover:text-accent"
           onClick={() => setAdvanced((v) => !v)}
         >
           {advanced ? '▾' : '▸'} {t('playground.advanced')}
         </button>
 
         {advanced && (
-          <div className="mt-3 space-y-3 rounded-lg border border-ink-200 p-3 dark:border-ink-700">
+          <div className="mt-3 space-y-3 rounded-lg border border-line p-3">
             <div>
               <label className="label" htmlFor="prompt">
                 {t('playground.promptLabel')}
               </label>
               <input id="prompt" className="input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Speak warmly, slightly slower." />
-              <p className="mt-1 text-xs text-ink-500">{t('playground.promptHint')}</p>
+              <p className="mt-1 text-xs text-muted">{t('playground.promptHint')}</p>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={strict} onChange={(e) => setStrict(e.target.checked)} />
               <span>
                 {t('playground.strictLabel')}
-                <span className="block text-xs text-ink-500">{t('playground.strictHint')}</span>
+                <span className="block text-xs text-muted">{t('playground.strictHint')}</span>
               </span>
             </label>
             <label className="flex items-center gap-2 text-sm">
@@ -273,7 +276,7 @@ export default function Playground() {
           >
             {busy && (
               <span
-                className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-accent-on/40 border-t-white"
                 aria-hidden="true"
               />
             )}
@@ -283,7 +286,7 @@ export default function Playground() {
               twice. `aria-live` on the button label region is enough. */}
 
           {estimateQuery.data && (
-            <span className="text-xs text-ink-500" data-testid="estimate">
+            <span className="text-xs text-muted" data-testid="estimate">
               ≈ {formatMs(estimateQuery.data.estimated_duration_ms)} ·{' '}
               {formatUsd(estimateQuery.data.estimated_cost_micro_usd)}
               {estimateQuery.data.within_free_tier && ' · free tier'}
@@ -296,7 +299,7 @@ export default function Playground() {
             // Without this the message appears silently and a screen-reader user has no
             // idea the request failed.
             role="alert"
-            className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+            className="mt-4 rounded-lg border border-bad/45 bg-bad/10 px-3 py-2 text-sm text-bad bg-bad/15"
             data-testid="error"
           >
             {error}
@@ -313,21 +316,21 @@ export default function Playground() {
                 autoPlay
               />
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="badge bg-accent-600/10 text-accent-600 dark:text-accent-400">
+                <span className="badge bg-accent/10 text-accent">
                   {result.provider}
                 </span>
-                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                <span className="badge bg-panel2 text-muted">
                   {result.voiceId}
                 </span>
-                <span className="text-ink-500">{formatMs(result.latencyMs)}</span>
-                <span className="text-ink-500">{formatUsd(result.costMicroUsd)}</span>
+                <span className="text-muted">{formatMs(result.latencyMs)}</span>
+                <span className="text-muted">{formatUsd(result.costMicroUsd)}</span>
                 {result.cached && (
-                  <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                  <span className="badge bg-ok/15 text-ok">
                     {t('playground.cachedNotice')}
                   </span>
                 )}
                 {result.fallbackFrom && (
-                  <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  <span className="badge bg-warn/15 text-warn">
                     {t('playground.fallbackNotice', { from: result.fallbackFrom, to: result.provider })}
                   </span>
                 )}
@@ -336,20 +339,20 @@ export default function Playground() {
                 </a>
               </div>
               {result.unsupported.length > 0 && (
-                <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                <p className="rounded-lg border border-warn/45 bg-warn/10 px-3 py-2 text-xs text-warn bg-warn/15">
                   {t('playground.unsupportedTitle')}: {result.unsupported.join(', ')}
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-ink-500">{t('playground.noResult')}</p>
+            <p className="text-sm text-muted">{t('playground.noResult')}</p>
           )}
         </div>
       </section>
 
       <aside className="space-y-4">
         <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
             {t('playground.params')}
           </h2>
           <dl className="space-y-2 text-sm">
@@ -367,7 +370,7 @@ export default function Playground() {
         </section>
 
         <section className="card p-4">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-500">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
             {t('nav.providers')}
           </h2>
           <ul className="space-y-1.5 text-sm">
@@ -376,17 +379,28 @@ export default function Playground() {
                 <span
                   className={
                     p.enabled
-                      ? 'h-2 w-2 shrink-0 rounded-full bg-emerald-500'
-                      : 'h-2 w-2 shrink-0 rounded-full bg-ink-400'
+                      ? 'h-2 w-2 shrink-0 rounded-full bg-ok'
+                      : 'h-2 w-2 shrink-0 rounded-full bg-muted-soft'
                   }
                 />
-                <span className={p.enabled ? '' : 'text-ink-500'}>{p.name}</span>
+                <span className={p.enabled ? '' : 'text-muted'}>{p.name}</span>
                 {!p.official && (
-                  <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  <span className="badge bg-warn/15 text-warn">
                     unofficial
                   </span>
                 )}
-                {p.reason && <span className="truncate text-xs text-ink-500">{p.reason}</span>}
+                {/* The reason is often a raw config key ("free_web.enabled=false").
+                    Showing it verbatim in the list is noise; keep it as a tooltip for
+                    whoever is actually editing the config, and say the plain thing here. */}
+                {p.reason && (
+                  <span
+                    className="truncate text-xs text-muted-soft"
+                    title={p.reason}
+                    aria-label={p.reason}
+                  >
+                    {t('playground.notEnabled')}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -417,7 +431,7 @@ function Slider({
     <div>
       <div className="mb-1 flex items-baseline justify-between">
         <span className="label mb-0">{label}</span>
-        <span className="font-mono text-xs text-ink-500">{suffix}</span>
+        <span className="font-mono text-xs text-muted">{suffix}</span>
       </div>
       <input
         type="range"
@@ -435,7 +449,7 @@ function Slider({
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-ink-500">{label}</dt>
+      <dt className="shrink-0 text-muted">{label}</dt>
       <dd className={mono ? 'truncate font-mono text-xs' : 'truncate text-right'}>{value}</dd>
     </div>
   )

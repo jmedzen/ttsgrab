@@ -35,6 +35,7 @@ const en = {
     paid: 'Paid',
   },
   playground: {
+    notEnabled: 'not enabled',
     title: 'Playground',
     subtitle: 'Synthesise text, tune the parameters, and listen.',
     textLabel: 'Text',
@@ -84,6 +85,10 @@ const en = {
     noTargets: 'Add at least one target to compare.',
   },
   voices: {
+    loadFailed: 'Could not load voices. Check your admin token, then retry.',
+    pin: 'Pin {{name}}',
+    unpin: 'Unpin {{name}}',
+    pinned: 'Pinned',
     title: 'Voices',
     subtitle: 'Every voice from every enabled provider.',
     searchPlaceholder: 'Search by name, id or language…',
@@ -168,6 +173,34 @@ const en = {
     examples: 'Examples',
     swagger: 'OpenAPI (Swagger)',
     noKeys: 'No API keys yet. The gateway accepts unauthenticated local requests.',
+  },
+  theme: {
+    change: 'Change theme',
+    dark: 'Dark',
+    light: 'Light',
+  },
+  studio: {
+    title: 'Google AI Studio keys',
+    subtitle:
+      'Free and paid keys are kept apart because they behave differently: a free key allows only a few requests per day, a paid key does not.',
+    free: 'Free',
+    paid: 'Paid',
+    kind: 'Key type',
+    addKey: 'Add API key',
+    add: 'Add',
+    empty: 'No keys yet. Add a free key from AI Studio to get started.',
+    freeRemaining: 'Free requests left today',
+    paidKeys: 'Paid keys',
+    noDailyCap: 'no daily cap',
+    today: 'today',
+    requestsTotal: 'requests total',
+    exhausted: 'exhausted',
+    cooling: 'cooling down',
+    failures: 'failures',
+    adminsOnly: 'Only an admin token can manage API keys.',
+    getKey: 'Create a free key at AI Studio',
+    freeTierNote:
+      'Gemini TTS free tier was cut to 10 requests per day in November 2026 — add a billed key for anything long.',
   },
   settings: {
     language: 'Language',

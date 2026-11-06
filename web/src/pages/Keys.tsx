@@ -76,7 +76,7 @@ export default function Keys() {
     <div className="space-y-5">
       <header>
         <h1 className="text-xl font-semibold">{t('keys.title')}</h1>
-        <p className="text-sm text-ink-500">{t('keys.subtitle')}</p>
+        <p className="text-sm text-muted">{t('keys.subtitle')}</p>
       </header>
 
       <section className="card p-4">
@@ -101,7 +101,7 @@ export default function Keys() {
             {t('common.save')}
           </button>
         </div>
-        <p className="mt-1 text-xs text-ink-500">{t('settings.tokenHint')}</p>
+        <p className="mt-1 text-xs text-muted">{t('settings.tokenHint')}</p>
       </section>
 
       <section className="card p-4">
@@ -155,12 +155,12 @@ export default function Keys() {
         </form>
 
         {newToken && (
-          <div className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-950">
-            <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+          <div className="mt-3 rounded-lg border border-ok/45 bg-ok/10 p-3 bg-ok/15">
+            <p className="text-xs font-medium text-ok">
               {t('keys.tokenOnce')}
             </p>
             <div className="mt-1 flex gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto rounded bg-white px-2 py-1 font-mono text-xs dark:bg-ink-900">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded bg-panel px-2 py-1 font-mono text-xs">
                 {newToken}
               </code>
               <button type="button" className="btn-ghost shrink-0 text-xs" onClick={() => copy(newToken, 'new')}>
@@ -173,7 +173,7 @@ export default function Keys() {
 
       <section className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500 dark:border-ink-800">
+          <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-2">{t('keys.name')}</th>
               <th className="px-4 py-2">{t('keys.prefix')}</th>
@@ -186,22 +186,22 @@ export default function Keys() {
           <tbody>
             {(keysQuery.data?.keys ?? []).length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-ink-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-muted">
                   {t('keys.noKeys')}
                 </td>
               </tr>
             )}
             {(keysQuery.data?.keys ?? []).map((k) => (
-              <tr key={k.id} className="border-b border-ink-100 last:border-0 dark:border-ink-800/60">
+              <tr key={k.id} className="border-b border-line last:border-0 border-line/60">
                 <td className="px-4 py-2">{k.name}</td>
                 <td className="px-4 py-2 font-mono text-xs">{k.prefix}…</td>
-                <td className="px-4 py-2 text-xs text-ink-500">
+                <td className="px-4 py-2 text-xs text-muted">
                   {k.provider_allowlist.length ? k.provider_allowlist.join(', ') : t('common.all')}
                 </td>
                 <td className="px-4 py-2 text-right text-xs">
                   {k.monthly_char_quota?.toLocaleString() ?? '—'}
                 </td>
-                <td className="px-4 py-2 text-xs text-ink-500">
+                <td className="px-4 py-2 text-xs text-muted">
                   {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '—'}
                 </td>
                 <td className="px-4 py-2 text-right">
@@ -227,13 +227,13 @@ export default function Keys() {
           <Example title="MCP (Claude)" code={MCP_EXAMPLE} onCopy={() => copy(MCP_EXAMPLE, 'mcp')} copied={copied === 'mcp'} />
         </div>
         <div className="mt-3 flex gap-3 text-xs">
-          <a className="text-accent-600 underline dark:text-accent-400" href="/docs">
+          <a className="text-accent underline" href="/docs">
             {t('keys.swagger')}
           </a>
-          <a className="text-accent-600 underline dark:text-accent-400" href="/openapi.json">
+          <a className="text-accent underline" href="/openapi.json">
             openapi.json
           </a>
-          <a className="text-accent-600 underline dark:text-accent-400" href="/llms.txt">
+          <a className="text-accent underline" href="/llms.txt">
             llms.txt
           </a>
         </div>
@@ -256,12 +256,12 @@ function Example({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-ink-500">{title}</span>
+        <span className="text-xs font-medium uppercase tracking-wide text-muted">{title}</span>
         <button type="button" className="btn-ghost px-2 py-0.5 text-xs" onClick={onCopy}>
           {copied ? '✓' : 'copy'}
         </button>
       </div>
-      <pre className="overflow-x-auto rounded-lg bg-ink-950 p-3 text-xs text-ink-100">
+      <pre className="overflow-x-auto rounded-lg bg-bg p-3 text-xs text-text">
         <code>{code}</code>
       </pre>
     </div>

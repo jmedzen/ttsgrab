@@ -21,7 +21,7 @@ BUILTIN_MODULES: tuple[str, ...] = (
     "ttsgrab.providers.edge",
     "ttsgrab.providers.gtts",
     "ttsgrab.providers.google_cloud",
-    "ttsgrab.providers.gemini",
+    "ttsgrab.providers.google_ai_studio",
     "ttsgrab.providers.azure",
 )
 

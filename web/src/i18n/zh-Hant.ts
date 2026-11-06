@@ -37,6 +37,7 @@ const zhHant: Translation = {
     paid: '付費',
   },
   playground: {
+    notEnabled: '未啟用',
     title: '試聽台',
     subtitle: '輸入文字、調整參數、立即試聽。',
     textLabel: '文字',
@@ -86,6 +87,10 @@ const zhHant: Translation = {
     noTargets: '請至少新增一個比較對象。',
   },
   voices: {
+    loadFailed: '無法載入語音清單。請確認管理員權杖後重試。',
+    pin: '釘選 {{name}}',
+    unpin: '取消釘選 {{name}}',
+    pinned: '已釘選',
     title: '語音',
     subtitle: '所有已啟用供應商的語音目錄。',
     moreHidden: '另有 {{count}} 個——請縮小搜尋範圍',
@@ -170,6 +175,34 @@ const zhHant: Translation = {
     examples: '範例',
     swagger: 'OpenAPI（Swagger）',
     noKeys: '尚無 API 金鑰。目前允許本機未驗證存取。',
+  },
+  theme: {
+    change: '切換主題',
+    dark: '深色',
+    light: '淺色',
+  },
+  studio: {
+    title: 'Google AI Studio 金鑰',
+    subtitle:
+      '免費與付費金鑰分開放，因為行為不同：免費金鑰每天只能請求少數幾次，付費金鑰沒有這個限制。',
+    free: '免費',
+    paid: '付費',
+    kind: '金鑰類型',
+    addKey: '新增 API 金鑰',
+    add: '新增',
+    empty: '尚無金鑰。先從 AI Studio 取得免費金鑰即可開始。',
+    freeRemaining: '今日剩餘免費次數',
+    paidKeys: '付費金鑰',
+    noDailyCap: '無每日上限',
+    today: '今日',
+    requestsTotal: '累計請求',
+    exhausted: '已用盡',
+    cooling: '冷卻中',
+    failures: '失敗次數',
+    adminsOnly: '只有管理員權杖可以管理 API 金鑰。',
+    getKey: '前往 AI Studio 建立免費金鑰',
+    freeTierNote:
+      'Gemini TTS 免費額度在 2026 年 11 月被砍到每天 10 次——長文請改用付費金鑰。',
   },
   settings: {
     language: '語言',

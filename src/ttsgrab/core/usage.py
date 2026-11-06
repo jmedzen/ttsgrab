@@ -141,7 +141,7 @@ class UsageLedger:
     def budget_status(self, by_provider: dict[str, dict[str, Any]]) -> dict[str, Any]:
         cfg = self.settings
         google = by_provider.get("google_cloud", {})
-        gemini = by_provider.get("gemini", {})
+        studio = by_provider.get("google_ai_studio", {})
         return {
             "google_cloud": {
                 "char_budget": cfg.google_cloud.monthly_budget_chars,
@@ -149,11 +149,11 @@ class UsageLedger:
                 "usd_budget": round(cfg.google_cloud.monthly_budget_micro_usd / 1_000_000, 4),
                 "usd_used": round(google.get("cost_micro_usd", 0) / 1_000_000, 4),
             },
-            "gemini": {
-                "char_budget": cfg.gemini.monthly_budget_chars,
-                "chars_used": gemini.get("characters", 0),
-                "usd_budget": round(cfg.gemini.monthly_budget_micro_usd / 1_000_000, 4),
-                "usd_used": round(gemini.get("cost_micro_usd", 0) / 1_000_000, 4),
+            "google_ai_studio": {
+                "char_budget": cfg.google_ai_studio.monthly_budget_chars,
+                "chars_used": studio.get("characters", 0),
+                "usd_budget": round(cfg.google_ai_studio.monthly_budget_micro_usd / 1_000_000, 4),
+                "usd_used": round(studio.get("cost_micro_usd", 0) / 1_000_000, 4),
             },
         }
 

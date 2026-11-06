@@ -26,7 +26,7 @@ export default function History() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t('history.title')}</h1>
-          <p className="text-sm text-ink-500">{t('history.subtitle')}</p>
+          <p className="text-sm text-muted">{t('history.subtitle')}</p>
         </div>
         <input
           className="input w-64"
@@ -37,31 +37,31 @@ export default function History() {
         />
       </header>
 
-      {isLoading && <p className="text-sm text-ink-500">{t('common.loading')}</p>}
+      {isLoading && <p className="text-sm text-muted">{t('common.loading')}</p>}
       {isError && <QueryError error={error} onRetry={() => void refetch()} />}
       {!isLoading && !isError && (data?.items ?? []).length === 0 && (
-        <p className="py-12 text-center text-sm text-ink-500">{t('history.empty')}</p>
+        <p className="py-12 text-center text-sm text-muted">{t('history.empty')}</p>
       )}
 
       <div className="space-y-2">
         {(data?.items ?? []).map((item) => (
           <div key={item.id} className="card p-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="badge bg-accent-600/10 text-accent-600 dark:text-accent-400">
+              <span className="badge bg-accent/10 text-accent">
                 {item.provider}
               </span>
-              <span className="font-mono text-ink-500">{item.voice_id}</span>
-              <span className="text-ink-500">{new Date(item.created_at).toLocaleString()}</span>
-              <span className="text-ink-500">{formatMs(item.latency_ms)}</span>
-              <span className="text-ink-500">{formatBytes(item.audio_bytes)}</span>
-              <span className="text-ink-500">{formatUsd(item.cost_micro_usd)}</span>
+              <span className="font-mono text-muted">{item.voice_id}</span>
+              <span className="text-muted">{new Date(item.created_at).toLocaleString()}</span>
+              <span className="text-muted">{formatMs(item.latency_ms)}</span>
+              <span className="text-muted">{formatBytes(item.audio_bytes)}</span>
+              <span className="text-muted">{formatUsd(item.cost_micro_usd)}</span>
               {item.from_cache && (
-                <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                <span className="badge bg-ok/15 text-ok">
                   cache
                 </span>
               )}
               {item.requested_provider && item.requested_provider !== item.provider && (
-                <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                <span className="badge bg-warn/15 text-warn">
                   fallback
                 </span>
               )}
@@ -87,7 +87,7 @@ export default function History() {
               </div>
             </div>
 
-            <p className="mt-2 line-clamp-2 text-sm text-ink-700 dark:text-ink-300">{item.text}</p>
+            <p className="mt-2 line-clamp-2 text-sm text-muted">{item.text}</p>
 
             {openId === item.id && item.audio_url && (
               <div className="mt-2">

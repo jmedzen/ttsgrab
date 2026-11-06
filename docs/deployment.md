@@ -231,9 +231,9 @@ tts.example.com {
    Make sure the proxy sets `X-Forwarded-For`, or rate limiting will see one client.
 
 2. **Set budgets per provider, in integer micro-USD.** There is no global dollar cap
-   because "spend up to $3 on Google but nothing on Gemini" is not expressible as one
+   because "spend up to $3 on Cloud TTS but nothing on AI Studio" is not expressible as one
    number. The fields are `google_cloud.monthly_budget_micro_usd` and
-   `gemini.monthly_budget_micro_usd`:
+   `google_ai_studio.monthly_budget_micro_usd`:
    ```bash
    TTSGRAB_GOOGLE_CLOUD__MONTHLY_BUDGET_MICRO_USD=3000000   # $3.00
    TTSGRAB_GEMINI__MONTHLY_BUDGET_MICRO_USD=1000000         # $1.00

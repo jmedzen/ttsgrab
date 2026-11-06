@@ -61,7 +61,7 @@ export default function Compare() {
       <section className="card p-5">
         <header className="mb-4">
           <h1 className="text-xl font-semibold">{t('compare.title')}</h1>
-          <p className="text-sm text-ink-500">{t('compare.subtitle')}</p>
+          <p className="text-sm text-muted">{t('compare.subtitle')}</p>
         </header>
 
         <textarea
@@ -74,7 +74,7 @@ export default function Compare() {
         <div className="mt-4 space-y-2">
           {targets.map((target, index) => (
             <div key={target.key} className="flex flex-wrap items-center gap-2">
-              <span className="w-6 shrink-0 text-sm text-ink-500">{index + 1}.</span>
+              <span className="w-6 shrink-0 text-sm text-muted">{index + 1}.</span>
               <select
                 className="input w-44 shrink-0"
                 value={target.provider}
@@ -145,7 +145,7 @@ export default function Compare() {
         </div>
 
         {mutation.error && (
-          <p className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          <p className="mt-3 rounded-lg border border-bad/45 bg-bad/10 px-3 py-2 text-sm text-bad bg-bad/15">
             {String(mutation.error)}
           </p>
         )}
@@ -162,7 +162,7 @@ export default function Compare() {
           tabIndex={0}
         >
           <table className="w-full min-w-[820px] text-sm">
-            <thead className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500 dark:border-ink-800">
+            <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-2.5">{t('compare.target')}</th>
                 <th className="px-4 py-2.5">Audio</th>
@@ -178,20 +178,20 @@ export default function Compare() {
               {rows.map((row, i) => (
                 <tr
                   key={`${row.provider}-${row.voice_id}-${i}`}
-                  className="border-b border-ink-100 last:border-0 dark:border-ink-800/60"
+                  className="border-b border-line last:border-0 border-line/60"
                 >
                   <td className="px-4 py-3">
                     <div className="font-medium">{row.provider}</div>
-                    <div className="font-mono text-xs text-ink-500">{row.voice_id}</div>
+                    <div className="font-mono text-xs text-muted">{row.voice_id}</div>
                     {row.error && (
-                      <div className="mt-1 text-xs text-red-600 dark:text-red-400">{row.error}</div>
+                      <div className="mt-1 text-xs text-bad">{row.error}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     {row.audio_url ? (
                       <AudioPlayer src={row.audio_url} format={row.format} compact className="min-w-[220px]" />
                     ) : (
-                      <span className="text-xs text-ink-500">—</span>
+                      <span className="text-xs text-muted">—</span>
                     )}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-xs">
@@ -220,7 +220,7 @@ export default function Compare() {
       )}
 
       {mutation.data && (
-        <p className="text-xs text-ink-500">
+        <p className="text-xs text-muted">
           {mutation.data.text_chars} {t('playground.characters')} · RTF = synthesis time ÷ audio
           duration (lower is faster than real time)
         </p>

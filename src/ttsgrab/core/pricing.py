@@ -58,7 +58,7 @@ DEFAULT_PRICING: dict[str, Any] = {
                 "notes": "Chirp 3 HD",
             },
         },
-        "gemini": {
+        "google_ai_studio": {
             "gemini-tts": {
                 "usd_per_mchar": 12.0,
                 "free_chars_per_month": 0,

@@ -1,12 +1,35 @@
 <!doctype html>
-<html lang="zh-Hant" class="dark">
+<html lang="zh-Hant" data-theme="midnight">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="dark light" />
     <title>ttsgrab — 統一 TTS 閘道</title>
+    <script>
+      /* Apply the saved theme before the first paint.
+         Without this the page renders in the default Midnight for one frame and then
+         switches — a bright flash for anyone on a light theme, which is worse than no
+         theming at all. Deliberately inline and dependency-free. */
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('ttsgrab.theme')
+          var known = ['midnight', 'ink', 'forest', 'paper', 'mist', 'sakura']
+          var dark = ['midnight', 'ink', 'forest']
+          var id =
+            known.indexOf(saved) >= 0
+              ? saved
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'paper'
+                : 'midnight'
+          document.documentElement.dataset.theme = id
+          document.documentElement.style.colorScheme = dark.indexOf(id) >= 0 ? 'dark' : 'light'
+        } catch (e) {
+          /* localStorage blocked: keep the default from the html attribute */
+        }
+      })()
+    </script>
   </head>
-  <body class="bg-ink-50 text-ink-900 dark:bg-ink-950 dark:text-ink-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

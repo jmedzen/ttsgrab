@@ -1,5 +1,17 @@
 import { expect, test } from '@playwright/test'
 
+// The gateway requires a token unless it runs with the localhost bypass. Without this the
+// voice catalogue 401s and every test that needs it times out for an unrelated reason.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((token) => {
+    try {
+      localStorage.setItem('ttsgrab.admin_token', token)
+    } catch {
+      /* ignore */
+    }
+  }, process.env.TTSGRAB_E2E_TOKEN ?? 'devtoken123')
+})
+
 /** Compare e2e: acceptance criterion #6 — compare at least 3 providers at once. */
 test.describe('Compare', () => {
   test('runs a comparison across multiple targets and shows metrics', async ({ page }) => {

@@ -532,7 +532,7 @@ async def test_every_provider_with_a_budget_enforces_it(ctx) -> None:
     from ttsgrab.core.errors import BudgetExceeded
     from ttsgrab.db.session import session_scope
 
-    for provider in ("google_cloud", "gemini", "azure"):
+    for provider in ("google_cloud", "google_ai_studio", "azure"):
         cfg = getattr(ctx.settings, provider)
         cfg.monthly_budget_chars = 10
         async with session_scope() as session:

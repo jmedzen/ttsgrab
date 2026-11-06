@@ -148,7 +148,7 @@ def test_docs_do_not_invent_settings_names() -> None:
                 "workers",
                 "edge",
                 "google_cloud",
-                "gemini",
+                "google_ai_studio",
                 "azure",
                 "free_web",
                 "mcp",

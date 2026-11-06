@@ -258,6 +258,29 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
+export interface PoolKey {
+  label: string
+  kind: 'free' | 'paid'
+  rpd_limit: number
+  requests_today: number
+  remaining_today: number | null
+  exhausted: boolean
+  failures: number
+  total_requests: number
+  cooling_down: boolean
+}
+
+export interface StudioPool {
+  keys: PoolKey[]
+  free_keys: number
+  paid_keys: number
+  free_remaining_today: number
+  paid_unlimited: boolean
+  exhausted: boolean
+  enabled: boolean
+  reason: string | null
+}
+
 export interface BuildInfo {
   version: string
   build: number | null
@@ -267,6 +290,28 @@ export interface BuildInfo {
 }
 
 export const api = {
+  /**
+   * Google AI Studio key pool. Admin-only on the server: a key pool is a billing surface,
+   * so a scoped API key must not be able to read or change it.
+   */
+  async studioKeys(): Promise<StudioPool> {
+    return json<StudioPool>('/v1/providers/google_ai_studio/keys')
+  },
+
+  async addStudioKey(key: string, kind: 'free' | 'paid'): Promise<StudioPool> {
+    return json<StudioPool>('/v1/providers/google_ai_studio/keys', {
+      method: 'POST',
+      body: JSON.stringify({ key, kind }),
+    })
+  },
+
+  async removeStudioKey(label: string): Promise<StudioPool> {
+    return json<StudioPool>(
+      `/v1/providers/google_ai_studio/keys/${encodeURIComponent(label)}`,
+      { method: 'DELETE' },
+    )
+  },
+
   /** Unauthenticated on purpose — the footer should show it without a token. */
   async buildInfo(): Promise<BuildInfo> {
     return json<BuildInfo>('/healthz')

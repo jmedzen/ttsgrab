@@ -20,7 +20,7 @@ def test_defaults_work_with_no_config_file(tmp_path: Path) -> None:
     assert settings.edge.enabled is True
     assert settings.google_cloud.enabled is False
     assert settings.azure.enabled is False
-    assert settings.gemini.enabled is False
+    assert settings.google_ai_studio.enabled is False
 
 
 def test_example_config_is_valid_and_complete() -> None:
@@ -133,7 +133,7 @@ def test_budget_defaults_are_non_zero_somewhere() -> None:
     settings = load_settings(REPO_ROOT / "config.example.yaml")
     budgets = [
         settings.google_cloud.monthly_budget_micro_usd,
-        settings.gemini.monthly_budget_micro_usd,
+        settings.google_ai_studio.monthly_budget_micro_usd,
     ]
     assert any(b > 0 for b in budgets)
 

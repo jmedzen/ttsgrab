@@ -47,7 +47,7 @@ router:
   default_policy: cheapest
   # Tried in this order once the policy's ranking is exhausted. Providers that are
   # disabled, lack the voice, or have an open circuit breaker are skipped.
-  fallback_chain: [edge, google_cloud, azure, gemini, kokoro, cosyvoice, gpt_sovits]
+  fallback_chain: [edge, google_cloud, azure, google_ai_studio, kokoro, cosyvoice, gpt_sovits]
   # How many extra providers to try after the first. Raise it if you have many workers and
   # want a deeper safety net; each attempt costs latency when the situation is already bad.
   max_fallbacks: 3
@@ -61,7 +61,7 @@ router:
   quality_scores:
     google_cloud: 0.95
     azure: 0.93
-    gemini: 0.88
+    google_ai_studio: 0.88
     cosyvoice: 0.85
     gpt_sovits: 0.80
     edge: 0.70
@@ -127,17 +127,20 @@ google_cloud:
   # Integer micro-USD. 3000000 = $3.00. The cap refuses rather than overspending.
   monthly_budget_micro_usd: 3000000
 
-gemini:
-  # Gemini 3.8 Flash TTS — a different API from Cloud TTS, hence a separate adapter.
-  # Free keys work through the same pool; free-tier quota is small and undocumented, so do
-  # not build a product on it.
+google_ai_studio:
+  # Gemini 3.8 Flash TTS through the AI Studio API — separate from Cloud TTS, so it needs
+  # its own keys (create them at https://aistudio.google.com/apikey).
   enabled: false
   model: gemini-3.8-flash-tts
-  base_url: https://generativelanguage.googleapis.com
-  # paid keys first, then free ones.
-  # strategy: round_robin | least_recently_used | failover
-  strategy: least_recently_used
-  api_keys: []
+  base_url: https://generativelanguage.googleapis.com/v1beta
+  # Two buckets on purpose. A free key has a small *daily request* allowance (Gemini TTS
+  # was cut to 10 RPD in November 2026) and will not carry a long document; a key on a
+  # billed project has no daily request cap. The pool spends free allowance first.
+  free_api_keys: []
+  paid_api_keys: []
+  free_rpd: 10
+  # strategy: free_first | round_robin | least_used
+  strategy: free_first
   monthly_budget_chars: 0
   monthly_budget_micro_usd: 1000000
 

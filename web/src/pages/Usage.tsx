@@ -7,11 +7,11 @@ export default function Usage() {
   const { t } = useTranslation()
   const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ['usage'], queryFn: () => api.usage(30) })
 
-  if (isLoading) return <p className="text-sm text-ink-500">{t('common.loading')}</p>
+  if (isLoading) return <p className="text-sm text-muted">{t('common.loading')}</p>
   // `return null` here would render a blank page, which looks like a working page with no
   // data. The user cannot tell the difference, so say what happened.
   if (isError) return <QueryError error={error} onRetry={() => void refetch()} />
-  if (!data) return <p className="text-sm text-ink-500">{t('usage.noData')}</p>
+  if (!data) return <p className="text-sm text-muted">{t('usage.noData')}</p>
 
   const freeTiers = Object.entries(data.free_tier)
   const providers = Object.entries(data.by_provider)
@@ -20,7 +20,7 @@ export default function Usage() {
     <div className="space-y-5">
       <header>
         <h1 className="text-xl font-semibold">{t('usage.title')}</h1>
-        <p className="text-sm text-ink-500">
+        <p className="text-sm text-muted">
           {t('usage.subtitle')} · {data.period.start.slice(0, 10)} → {data.period.end.slice(0, 10)}
         </p>
       </header>
@@ -35,31 +35,31 @@ export default function Usage() {
       <section className="card p-4">
         <h2 className="mb-3 font-medium">{t('usage.freeTierRemaining')}</h2>
         {freeTiers.length === 0 ? (
-          <p className="text-sm text-ink-500">{t('usage.noData')}</p>
+          <p className="text-sm text-muted">{t('usage.noData')}</p>
         ) : (
           <div className="space-y-3">
             {freeTiers.map(([provider, tiers]) => (
               <div key={provider}>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
                   {provider}
                 </div>
                 {tiers.map((tier) => (
                   <div key={tier.tier} className="mb-2">
                     <div className="flex justify-between text-xs">
                       <span>{tier.tier}</span>
-                      <span className="font-mono text-ink-500">
+                      <span className="font-mono text-muted">
                         {tier.used.toLocaleString()} / {tier.limit.toLocaleString()} (
                         {tier.used_pct}%)
                       </span>
                     </div>
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-ink-200 dark:bg-ink-700">
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-line bg-line-strong">
                       <div
                         className={
                           tier.used_pct > 90
-                            ? 'h-1.5 rounded-full bg-red-500'
+                            ? 'h-1.5 rounded-full bg-bad'
                             : tier.used_pct > 70
-                              ? 'h-1.5 rounded-full bg-amber-500'
-                              : 'h-1.5 rounded-full bg-emerald-500'
+                              ? 'h-1.5 rounded-full bg-warn'
+                              : 'h-1.5 rounded-full bg-ok'
                         }
                         style={{ width: `${Math.min(100, tier.used_pct)}%` }}
                       />
@@ -74,7 +74,7 @@ export default function Usage() {
 
       <section className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead className="border-b border-ink-200 text-left text-xs uppercase tracking-wide text-ink-500 dark:border-ink-800">
+          <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-2">{t('usage.byProvider')}</th>
               <th className="px-4 py-2 text-right">{t('usage.characters')}</th>
@@ -86,13 +86,13 @@ export default function Usage() {
           <tbody>
             {providers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-ink-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-muted">
                   {t('usage.noData')}
                 </td>
               </tr>
             )}
             {providers.map(([provider, row]) => (
-              <tr key={provider} className="border-b border-ink-100 last:border-0 dark:border-ink-800/60">
+              <tr key={provider} className="border-b border-line last:border-0 border-line/60">
                 <td className="px-4 py-2 font-medium">{provider}</td>
                 <td className="px-4 py-2 text-right font-mono text-xs">
                   {row.characters.toLocaleString()}
@@ -115,14 +115,14 @@ export default function Usage() {
             <div key={provider}>
               <div className="flex justify-between text-xs">
                 <span>{provider}</span>
-                <span className="font-mono text-ink-500">
+                <span className="font-mono text-muted">
                   {b.chars_used.toLocaleString()} /{' '}
                   {b.char_budget ? b.char_budget.toLocaleString() : t('usage.budgetUnlimited')}
                 </span>
               </div>
-              <div className="mt-1 h-1.5 w-full rounded-full bg-ink-200 dark:bg-ink-700">
+              <div className="mt-1 h-1.5 w-full rounded-full bg-line bg-line-strong">
                 <div
-                  className="h-1.5 rounded-full bg-accent-500"
+                  className="h-1.5 rounded-full bg-accent"
                   style={{
                     width: b.char_budget
                       ? `${Math.min(100, (b.chars_used / b.char_budget) * 100)}%`
@@ -133,7 +133,7 @@ export default function Usage() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-ink-500">{t('usage.estimateNote')}</p>
+        <p className="mt-3 text-xs text-muted">{t('usage.estimateNote')}</p>
       </section>
     </div>
   )
@@ -142,7 +142,7 @@ export default function Usage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="card p-4">
-      <div className="text-xs uppercase tracking-wide text-ink-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
     </div>
   )

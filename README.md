@@ -5,7 +5,8 @@
 **One TTS API in front of many engines.** A web UI for listening and tuning, a stable REST
 API for agents, and a Docker command that gets you audio in about five minutes.
 
-Edge TTS, Google Cloud TTS, Gemini TTS, Azure Speech, and self-hosted GPU workers behind a
+Edge TTS, Google Cloud TTS, Google AI Studio (Gemini), Azure Speech, and self-hosted GPU
+workers behind a
 single `POST /v1/tts` — with routing, fallback, caching, cost accounting and a hard budget
 cap you can actually trust.
 
@@ -21,7 +22,7 @@ cap you can actually trust.
                                             │
         ┌───────────────┬───────────────────┼───────────────────┬──────────────┐
         │               │                   │                   │              │
-   edge (free)   google_cloud (paid)    gemini (pool)      azure (F0)   LAN workers
+   edge (free)   google_cloud (paid)   google_ai_studio (pool)   azure (F0)   LAN workers
    unofficial    4M free/mo             no free tier       500k free    kokoro / cosyvoice
                                                                         / gpt_sovits
 ```
@@ -133,7 +134,9 @@ free provider, because that turns a loud failure into a silent quality regressio
 | **Usage** | Characters, cost, free-tier headroom, daily series |
 | **API Keys** | Per-key provider allowlists, rate limits, monthly quotas |
 
-Dark mode, 繁體中文 / English, responsive.
+**Six themes** (Midnight, Ink, Forest, Paper, Mist, Sakura), 繁體中文 / English, responsive.
+Voices you use often can be pinned; picking a provider narrows the voice list to that
+provider and reselects a voice it can actually speak.
 
 ### Agents
 
@@ -162,7 +165,7 @@ stability columns before choosing.**
 |---|---|---|---|---|---|---|
 | **Edge TTS** | ✗ unofficial | free | unlimited | ✓ 3 voices | **fragile** — DRM-gated, has broken 6× since 2024 | **on** |
 | **Google Cloud TTS** | ✓ | $4–$160 / 1M chars | 4M Standard+WaveNet, 1M Neural2/Chirp3-HD | ✓ `cmn-TW-*`, Neural2 | stable | off |
-| **Gemini TTS** | ✓ | ~$12 / 1M chars | none | ✓ | preview — model id may change | off |
+| **Google AI Studio** | ✓ | ~$12 / 1M chars | **10 requests/day per free key** | ✓ | free tier is tiny — add a billed key | off |
 | **Azure Speech** | ✓ | $16 / 1M chars | 500k (F0), **fails closed** | ✓ best zh-TW coverage | stable | off |
 | **Kokoro** | self-hosted | free | — | ✗ zh-CN only, weak | stable (Apache-2.0) | off |
 | **CosyVoice2** | self-hosted | free | — | ✓ strong, cloneable | stable (Apache-2.0) | off |
@@ -213,7 +216,7 @@ src/ttsgrab/
   api/          HTTP surface: v1/, schemas, deps (auth, rate limit)
   core/         the pipeline — router, synthesis, cache, pricing, usage,
                 textsplit, audio (ffmpeg), security, obs (logs + metrics)
-  providers/    in-process adapters: edge, gtts, google_cloud, gemini, azure
+  providers/    in-process adapters: edge, gtts, google_cloud, google_ai_studio, azure
   workers/      client + monitor for remote HTTP model workers
   db/           SQLAlchemy models and session
   web/          the built SPA (served by FastAPI, one container)

@@ -2,70 +2,271 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+   Six themes, ported from vidgrab.
+
+   Everything is expressed as RGB triples (`11 13 18`) rather than hex, because Tailwind's
+   opacity modifiers (`bg-panel/85`) compile to `rgb(var(--panel-rgb) / 0.85)`. With hex
+   variables those modifiers silently break — the utility emits invalid CSS and the element
+   falls back to transparent, which is a hard failure to spot in a dark theme.
+
+   A theme only swaps variables; no layout is duplicated. `color-scheme` is set per theme so
+   scrollbars, carets and native controls follow along.
+*/
 @layer base {
-  :root {
-    color-scheme: light dark;
+  :root,
+  [data-theme='midnight'] {
+    --bg-rgb: 11 13 18;
+    --panel-rgb: 20 24 33;
+    --panel2-rgb: 26 31 43;
+    --line-rgb: 38 44 58;
+    --line-strong-rgb: 51 59 77;
+    --text-rgb: 233 236 243;
+    --muted-rgb: 142 152 173;
+    --muted-soft-rgb: 107 118 144;
+    --accent-rgb: 108 192 255;
+    --on-accent-rgb: 6 18 28;
+    --accent-hover-rgb: 142 209 255;
+    --ok-rgb: 94 226 160;
+    --warn-rgb: 243 201 107;
+    --bad-rgb: 255 139 139;
   }
+
+  [data-theme='ink'] {
+    --bg-rgb: 8 9 11;
+    --panel-rgb: 16 17 20;
+    --panel2-rgb: 22 24 29;
+    --line-rgb: 35 38 41;
+    --line-strong-rgb: 48 51 58;
+    --text-rgb: 230 230 228;
+    --muted-rgb: 138 141 146;
+    --muted-soft-rgb: 107 110 115;
+    --accent-rgb: 201 162 39;
+    --on-accent-rgb: 20 16 10;
+    --accent-hover-rgb: 220 182 63;
+    --ok-rgb: 121 195 154;
+    --warn-rgb: 216 178 90;
+    --bad-rgb: 224 139 127;
+  }
+
+  [data-theme='forest'] {
+    --bg-rgb: 10 18 16;
+    --panel-rgb: 15 26 23;
+    --panel2-rgb: 19 33 29;
+    --line-rgb: 31 51 48;
+    --line-strong-rgb: 43 68 64;
+    --text-rgb: 228 239 233;
+    --muted-rgb: 135 162 154;
+    --muted-soft-rgb: 106 130 123;
+    --accent-rgb: 111 214 168;
+    --on-accent-rgb: 6 20 15;
+    --accent-hover-rgb: 142 228 191;
+    --ok-rgb: 111 214 168;
+    --warn-rgb: 227 196 107;
+    --bad-rgb: 239 143 143;
+  }
+
+  [data-theme='paper'] {
+    --bg-rgb: 247 244 238;
+    --panel-rgb: 255 253 249;
+    --panel2-rgb: 242 238 230;
+    --line-rgb: 224 217 204;
+    --line-strong-rgb: 207 197 179;
+    --text-rgb: 35 32 25;
+    --muted-rgb: 111 103 89;
+    --muted-soft-rgb: 138 130 114;
+    --accent-rgb: 181 101 29;
+    --on-accent-rgb: 255 250 242;
+    --accent-hover-rgb: 156 84 23;
+    --ok-rgb: 47 125 79;
+    --warn-rgb: 154 107 21;
+    --bad-rgb: 176 58 58;
+  }
+
+  [data-theme='mist'] {
+    --bg-rgb: 238 242 247;
+    --panel-rgb: 255 255 255;
+    --panel2-rgb: 241 245 250;
+    --line-rgb: 214 222 232;
+    --line-strong-rgb: 195 207 221;
+    --text-rgb: 27 37 50;
+    --muted-rgb: 104 117 138;
+    --muted-soft-rgb: 132 148 170;
+    --accent-rgb: 47 111 208;
+    --on-accent-rgb: 255 255 255;
+    --accent-hover-rgb: 36 90 176;
+    --ok-rgb: 31 122 82;
+    --warn-rgb: 138 101 18;
+    --bad-rgb: 178 59 74;
+  }
+
+  [data-theme='sakura'] {
+    --bg-rgb: 253 244 245;
+    --panel-rgb: 255 250 251;
+    --panel2-rgb: 251 238 240;
+    --line-rgb: 238 217 222;
+    --line-strong-rgb: 224 196 203;
+    --text-rgb: 43 31 36;
+    --muted-rgb: 125 98 107;
+    --muted-soft-rgb: 154 130 139;
+    --accent-rgb: 194 90 122;
+    --on-accent-rgb: 255 247 249;
+    --accent-hover-rgb: 168 74 102;
+    --ok-rgb: 61 127 94;
+    --warn-rgb: 150 112 28;
+    --bad-rgb: 187 59 87;
+  }
+
   html,
   body,
   #root {
     height: 100%;
   }
+
   body {
     @apply antialiased;
+    background: rgb(var(--bg-rgb));
+    color: rgb(var(--text-rgb));
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    /* One transition when the theme changes, instead of a hard flash. */
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease;
   }
+
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-ink-300 dark:bg-ink-700;
+    @apply rounded-full;
+    background: rgb(var(--line-strong-rgb));
   }
   ::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent;
+  }
+
+  /* Focus ring must be visible on every theme, including the light ones. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent-rgb));
+    outline-offset: 2px;
   }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-ink-200 bg-white shadow-sm dark:border-ink-800 dark:bg-ink-900;
+    @apply rounded-xl border shadow-sm;
+    border-color: rgb(var(--line-rgb));
+    background: rgb(var(--panel-rgb));
+  }
+  .card-raised {
+    @apply card;
+    background: rgb(var(--panel2-rgb));
   }
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium
       transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-accent-600 text-white hover:bg-accent-500;
+    @apply btn;
+    background: rgb(var(--accent-rgb));
+    color: rgb(var(--on-accent-rgb));
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: rgb(var(--accent-hover-rgb));
   }
   .btn-ghost {
-    @apply btn border border-ink-200 bg-transparent text-ink-700 hover:bg-ink-100
-      dark:border-ink-700 dark:text-ink-200 dark:hover:bg-ink-800;
+    @apply btn border bg-transparent;
+    border-color: rgb(var(--line-rgb));
+    color: rgb(var(--muted-rgb));
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgb(var(--panel2-rgb));
+    color: rgb(var(--text-rgb));
   }
   .btn-danger {
-    @apply btn border border-red-300 text-red-600 hover:bg-red-50
-      dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950;
+    @apply btn border;
+    border-color: rgb(var(--bad-rgb) / 0.45);
+    color: rgb(var(--bad-rgb));
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: rgb(var(--bad-rgb) / 0.12);
   }
   .input {
-    @apply w-full rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm
-      placeholder:text-ink-400 focus:border-accent-500 focus:outline-none focus:ring-1
-      focus:ring-accent-500 dark:border-ink-700 dark:bg-ink-900 dark:placeholder:text-ink-500;
+    @apply w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-1;
+    border-color: rgb(var(--line-rgb));
+    background: rgb(var(--panel-rgb));
+    color: rgb(var(--text-rgb));
+  }
+  .input::placeholder {
+    color: rgb(var(--muted-soft-rgb));
+  }
+  .input:focus {
+    border-color: rgb(var(--accent-rgb));
+    --tw-ring-color: rgb(var(--accent-rgb));
   }
   .label {
-    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400;
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide;
+    color: rgb(var(--muted-rgb));
   }
   .badge {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
   }
+  .badge-ok {
+    @apply badge;
+    background: rgb(var(--ok-rgb) / 0.15);
+    color: rgb(var(--ok-rgb));
+  }
+  .badge-warn {
+    @apply badge;
+    background: rgb(var(--warn-rgb) / 0.15);
+    color: rgb(var(--warn-rgb));
+  }
+  .badge-bad {
+    @apply badge;
+    background: rgb(var(--bad-rgb) / 0.15);
+    color: rgb(var(--bad-rgb));
+  }
+  .badge-muted {
+    @apply badge;
+    background: rgb(var(--panel2-rgb));
+    color: rgb(var(--muted-rgb));
+  }
+  .badge-accent {
+    @apply badge;
+    background: rgb(var(--accent-rgb) / 0.15);
+    color: rgb(var(--accent-rgb));
+  }
+  .link-accent {
+    color: rgb(var(--accent-rgb));
+    @apply underline;
+  }
+  .link-accent:hover {
+    color: rgb(var(--accent-hover-rgb));
+  }
+  /* Horizontal rule / table divider colour, used in several pages. */
+  .divider {
+    border-color: rgb(var(--line-rgb));
+  }
 }
 
-/* Range inputs need explicit styling to look the same in both themes. */
+/* Range inputs need explicit styling; a native slider looks wrong in five of six themes. */
 input[type='range'] {
-  @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-200 dark:bg-ink-700;
+  @apply h-1.5 w-full cursor-pointer appearance-none rounded-full;
+  background: rgb(var(--line-rgb));
 }
 input[type='range']::-webkit-slider-thumb {
-  @apply h-3.5 w-3.5 appearance-none rounded-full bg-accent-500;
+  @apply h-3.5 w-3.5 cursor-pointer appearance-none rounded-full;
+  background: rgb(var(--accent-rgb));
 }
 input[type='range']::-moz-range-thumb {
-  @apply h-3.5 w-3.5 rounded-full border-0 bg-accent-500;
+  @apply h-3.5 w-3.5 cursor-pointer rounded-full border-0;
+  background: rgb(var(--accent-rgb));
+}
+
+/* Respect the OS setting; motion is decoration here, not information. */
+@media (prefers-reduced-motion: reduce) {
+  body {
+    transition: none;
+  }
 }

@@ -131,7 +131,7 @@ export default function AudioPlayer({
       <button
         type="button"
         onClick={toggle}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-600 text-white transition-colors hover:bg-accent-500"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent text-accent-on transition-colors hover:bg-accent-hover"
         aria-label={playing ? t('common.pause') : t('common.play')}
         data-testid="play-button"
       >
@@ -152,7 +152,7 @@ export default function AudioPlayer({
                   key={i}
                   className={clsx(
                     'flex-1 rounded-sm transition-colors',
-                    played ? 'bg-accent-500' : 'bg-ink-300 dark:bg-ink-700',
+                    played ? 'bg-accent' : 'bg-line-strong',
                   )}
                   style={{ height: `${Math.max(6, p * 100)}%` }}
                 />
@@ -160,16 +160,16 @@ export default function AudioPlayer({
             })}
           </div>
         ) : (
-          <div className="h-full w-full rounded bg-ink-200 dark:bg-ink-800">
+          <div className="h-full w-full rounded bg-line bg-panel2">
             <div
-              className="h-full rounded bg-accent-500/70 transition-[width]"
+              className="h-full rounded bg-accent/70 transition-[width]"
               style={{ width: `${ratio * 100}%` }}
             />
           </div>
         )}
       </div>
 
-      <span className="shrink-0 font-mono text-xs tabular-nums text-ink-500">
+      <span className="shrink-0 font-mono text-xs tabular-nums text-muted">
         {loading && peaks.length === 0
           ? '…'
           : `${formatTime(progress)} / ${formatTime(duration)}`}

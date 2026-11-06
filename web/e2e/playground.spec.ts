@@ -1,5 +1,17 @@
 import { expect, test } from '@playwright/test'
 
+// The gateway requires a token unless it runs with the localhost bypass. Without this the
+// voice catalogue 401s and every test that needs it times out for an unrelated reason.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((token) => {
+    try {
+      localStorage.setItem('ttsgrab.admin_token', token)
+    } catch {
+      /* ignore */
+    }
+  }, process.env.TTSGRAB_E2E_TOKEN ?? 'devtoken123')
+})
+
 /**
  * Playground e2e: the acceptance criterion is "with only Edge TTS configured, you can
  * synthesise in the UI and hear it". So this test really does click Synthesise and
@@ -56,12 +68,22 @@ test.describe('Playground', () => {
     expect(['Playground', '試聽台']).toContain(after ?? '')
   })
 
-  test('toggles dark mode', async ({ page }) => {
+  test('switches between a dark and a light theme', async ({ page }) => {
+    // The binary dark-mode toggle was replaced by the six-theme picker; the property
+    // worth asserting is unchanged: choosing a light theme really changes the page.
     await page.goto('/')
     const html = page.locator('html')
-    const before = await html.getAttribute('class')
-    await page.getByTestId('theme-toggle').click()
-    const after = await html.getAttribute('class')
-    expect(before).not.toBe(after)
+
+    await page.getByTestId('theme-picker').click()
+    await page.getByTestId('theme-midnight').click()
+    await expect(html).toHaveAttribute('data-theme', 'midnight')
+    const dark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+
+    await page.getByTestId('theme-picker').click()
+    await page.getByTestId('theme-sakura').click()
+    await expect(html).toHaveAttribute('data-theme', 'sakura')
+    const light = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+
+    expect(dark).not.toBe(light)
   })
 })

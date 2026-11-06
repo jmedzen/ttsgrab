@@ -22,7 +22,7 @@ export default function QueryError({ error, onRetry, className }: Props) {
     <div
       role="alert"
       className={
-        'rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300 ' +
+        'rounded-lg border border-bad/45 bg-bad/10 px-3 py-2 text-sm text-bad bg-bad/15' +
         (className ?? '')
       }
     >

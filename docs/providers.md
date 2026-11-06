@@ -15,7 +15,7 @@ Last reviewed: 2026-11. Vendor pricing and free tiers change; re-check before co
 |---|---|---|---|---|---|---|---|
 | **Edge TTS** | ✗ | free | unlimited, unofficial | ✓ 3 voices | **~650 ms** total, **~440 ms** first byte | **fragile** — 6 outages since 2024 | unofficial endpoint |
 | **Google Cloud TTS** | ✓ | $4 (Standard) – $160 (Studio) | 4M Std+WaveNet, 1M Neural2 / Chirp3-HD / Studio / Polyglot | ✓ `cmn-TW-*`; **not** in Chirp 3 HD | not measured — no account | stable | REST, service account |
-| **Gemini TTS** | ✓ | ~$12 | none | ✓ | not measured — no account | preview | REST, API key |
+| **Google AI Studio** | ✓ | ~$12 | 10 requests/day per free key | ✓ | not measured — no account | preview | REST, API key |
 | **Azure Speech** | ✓ | $16 (neural) | 500k on F0, **fails closed** | ✓ widest zh-TW coverage | not measured — no account | stable | REST, subscription key |
 | **Kokoro** | self-hosted | electricity | — | ✗ zh-CN only, weak | not measured — no GPU here | stable (Apache-2.0) | worker container |
 | **CosyVoice2** | self-hosted | electricity | — | ✓ strong, cloneable | not measured — no GPU here | stable (Apache-2.0) | worker container |
@@ -69,7 +69,7 @@ does not. Configure both.
 | **Edge TTS** | No supported API exists. The endpoint is the browser's read-aloud service, gated by a rotating `Sec-MS-GEC` token. Microsoft grants no redistribution right for the output. Personal and development use only. |
 | **gTTS / translate_tts** | Scrape `translate.google.com`. Google's ToS prohibits automated access. Rate-limited and blocked at any real volume. |
 | **Google Cloud TTS** | Commercial use permitted under the Cloud terms. Audio may be used in your product; the service account key is a credential and must be treated as one. |
-| **Gemini TTS** | Same Cloud relationship, but the model is preview — the id can change under you. |
+| **Google AI Studio** | Gemini 3.8 Flash TTS. Free keys are capped at a few requests per **day** (10 RPD as of Nov 2026), so a long document will exhaust them; add a billed key. |
 | **Azure Speech** | Commercial use permitted. There is a documented policy against using it to impersonate; voice cloning requires consent. |
 | **Kokoro / CosyVoice2 / GPT-SoVITS** | Code **and** weights are permissive (Apache-2.0, Apache-2.0, MIT). This is why they are the three that ship. |
 
@@ -88,7 +88,7 @@ with per-voice mixed licences, and no zh-TW).
 - **`GET /v1/providers` reports `official`, `stability` and `cost_class` per provider**, so a
   caller can decide for itself rather than trusting this document.
 - **Budgets are per provider and refused on breach.** There is no global dollar cap, because
-  "spend $3 on Google and nothing on Gemini" is not one number.
+  "spend $3 on Google Cloud and nothing on Google AI Studio" is not one number.
 
 ---
 

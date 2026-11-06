@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import StudioKeyPool from '../components/StudioKeyPool'
 import { api, formatMs } from '../lib/api'
 
 export default function Providers() {
@@ -42,7 +43,7 @@ export default function Providers() {
     <div className="space-y-5">
       <header>
         <h1 className="text-xl font-semibold">{t('providers.title')}</h1>
-        <p className="text-sm text-ink-500">{t('providers.subtitle')}</p>
+        <p className="text-sm text-muted">{t('providers.subtitle')}</p>
       </header>
 
       <div className="grid gap-2 md:grid-cols-2">
@@ -53,57 +54,57 @@ export default function Providers() {
                 <span
                   className={
                     p.enabled
-                      ? 'h-2.5 w-2.5 rounded-full bg-emerald-500'
-                      : 'h-2.5 w-2.5 rounded-full bg-ink-400'
+                      ? 'h-2.5 w-2.5 rounded-full bg-ok'
+                      : 'h-2.5 w-2.5 rounded-full bg-muted-soft'
                   }
                 />
                 <h2 className="font-medium">{p.name}</h2>
                 {p.official ? (
-                  <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                  <span className="badge bg-panel2 text-muted">
                     {t('providers.official')}
                   </span>
                 ) : (
-                  <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  <span className="badge bg-warn/15 text-warn">
                     {t('providers.unofficial')}
                   </span>
                 )}
                 {p.stability !== 'stable' && (
-                  <span className="badge bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
+                  <span className="badge bg-warn/15 text-warn">
                     {p.stability}
                   </span>
                 )}
               </div>
-              <span className="shrink-0 text-xs text-ink-500">{p.kind}</span>
+              <span className="shrink-0 text-xs text-muted">{p.kind}</span>
             </div>
 
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
               <div className="flex justify-between">
-                <dt className="text-ink-500">{t('providers.voicesCount')}</dt>
+                <dt className="text-muted">{t('providers.voicesCount')}</dt>
                 <dd>{p.voices}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-500">cost</dt>
+                <dt className="text-muted">cost</dt>
                 <dd>{p.cost_class}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-500">{t('providers.latency')}</dt>
+                <dt className="text-muted">{t('providers.latency')}</dt>
                 <dd>{formatMs(p.health?.ewma_ms ?? null)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-500">failures</dt>
+                <dt className="text-muted">failures</dt>
                 <dd>{p.health?.failures ?? 0}</dd>
               </div>
             </dl>
 
             {p.reason && (
-              <p className="mt-2 rounded bg-ink-100 px-2 py-1 text-xs text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+              <p className="mt-2 rounded bg-panel2 px-2 py-1 text-xs text-muted">
                 {t('providers.notConfigured')}: {p.reason}
               </p>
             )}
-            {p.note && <p className="mt-2 text-xs text-ink-500">{p.note}</p>}
+            {p.note && <p className="mt-2 text-xs text-muted">{p.note}</p>}
             {p.tos_url && (
               <a
-                className="mt-1 inline-block text-xs text-accent-600 underline dark:text-accent-400"
+                className="mt-1 inline-block text-xs text-accent underline"
                 href={p.tos_url}
                 target="_blank"
                 rel="noreferrer"
@@ -115,37 +116,39 @@ export default function Providers() {
         ))}
       </div>
 
+      <StudioKeyPool />
+
       <section className="card p-4">
         <h2 className="mb-3 font-medium">{t('providers.workers')}</h2>
 
         {(workersQuery.data?.workers ?? []).length === 0 ? (
-          <p className="text-sm text-ink-500">{t('providers.noWorkers')}</p>
+          <p className="text-sm text-muted">{t('providers.noWorkers')}</p>
         ) : (
           <div className="space-y-2">
             {(workersQuery.data?.workers ?? []).map((w) => (
               <div
                 key={w.id}
-                className="flex flex-wrap items-center gap-3 rounded-lg border border-ink-200 p-2.5 dark:border-ink-700"
+                className="flex flex-wrap items-center gap-3 rounded-lg border border-line p-2.5"
               >
                 <span
                   className={
                     w.healthy
-                      ? 'h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500'
-                      : 'h-2.5 w-2.5 shrink-0 rounded-full bg-red-500'
+                      ? 'h-2.5 w-2.5 shrink-0 rounded-full bg-ok'
+                      : 'h-2.5 w-2.5 shrink-0 rounded-full bg-bad'
                   }
                   title={w.healthy ? t('providers.healthy') : t('providers.unhealthy')}
                 />
                 <span className="font-medium">{w.name}</span>
-                <span className="truncate font-mono text-xs text-ink-500">{w.base_url}</span>
-                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                <span className="truncate font-mono text-xs text-muted">{w.base_url}</span>
+                <span className="badge bg-panel2 text-muted">
                   {w.kind}
                 </span>
-                <span className="text-xs text-ink-500">{w.voices} voices</span>
+                <span className="text-xs text-muted">{w.voices} voices</span>
                 {w.latency_ms_ewma !== null && (
-                  <span className="text-xs text-ink-500">{formatMs(w.latency_ms_ewma)}</span>
+                  <span className="text-xs text-muted">{formatMs(w.latency_ms_ewma)}</span>
                 )}
                 {w.last_error && (
-                  <span className="truncate text-xs text-red-600 dark:text-red-400">
+                  <span className="truncate text-xs text-bad">
                     {t('providers.lastError')}: {w.last_error}
                   </span>
                 )}
@@ -205,7 +208,7 @@ export default function Providers() {
           </button>
         </form>
         {formError && (
-          <p className="mt-2 text-xs text-red-600 dark:text-red-400" data-testid="worker-error">
+          <p className="mt-2 text-xs text-bad" data-testid="worker-error">
             {formError}
           </p>
         )}

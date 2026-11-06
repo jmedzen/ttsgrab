@@ -1,8 +1,8 @@
 # Operated by an agent? Read this, not the README.
 
 You are talking to a **unified TTS gateway**. One API over Edge TTS, Google Cloud TTS,
-Gemini TTS, Azure Speech, and self-hosted model workers. The gateway picks a provider,
-handles fallback, caches audio, and tracks cost.
+Google AI Studio (Gemini), Azure Speech, and self-hosted model workers. The gateway picks a
+provider, handles fallback, caches audio, and tracks cost.
 
 Default base URL: `http://localhost:8300`
 
@@ -62,6 +62,11 @@ Returns raw audio bytes (mp3 by default). Read the headers:
   transient error.
 - **Reuse cached audio.** Identical text + voice + params is served from disk at zero cost.
   Do not add timestamps or random suffixes to force a fresh synthesis unless you mean it.
+- **Google AI Studio free keys are rate-limited per day, not per minute.** A free key allows
+  only ~10 TTS requests per day; a long document will exhaust it in one go. If
+  `/v1/providers` reports `google_ai_studio` as enabled but synthesis returns
+  `quota_exceeded`, you have hit that daily cap — fall back rather than retrying, because
+  retrying cannot help until the next Pacific midnight.
 
 ---
 
@@ -81,6 +86,7 @@ Returns raw audio bytes (mp3 by default). Read the headers:
 | GET | `/v1/jobs/{id}` | Poll it |
 | GET | `/v1/usage` | This month's characters and cost per provider |
 | GET | `/v1/history` | Past syntheses, replayable |
+| GET/POST/DELETE | `/v1/providers/google_ai_studio/keys` | **Admin only.** Manage free/paid Google AI Studio keys |
 | — | `/mcp` | MCP tools: `synthesize_speech`, `list_voices`, `list_providers`, `get_usage` |
 | GET | `/healthz` | Liveness **and the build number** — quote it in bug reports |
 | — | `/llms.txt`, `/agents.md` | This document, machine-readable |

@@ -11,6 +11,8 @@ import Usage from './pages/Usage'
 import Keys from './pages/Keys'
 import { setLanguage } from './i18n'
 import { api, type BuildInfo } from './lib/api'
+import ThemePicker from './components/ThemePicker'
+import { applyThemeToDocument, initialTheme } from './lib/theme'
 
 const NAV = [
   { to: '/', key: 'playground', end: true },
@@ -23,21 +25,18 @@ const NAV = [
 ] as const
 
 function useTheme() {
-  const [dark, setDark] = useState(() => {
-    const stored = localStorage.getItem('ttsgrab.theme')
-    if (stored) return stored === 'dark'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
+  // The saved theme is read once, then owned by React. The inline script in index.html has
+  // already applied it to <html> before paint, so this only has to stay in sync with it.
+  const [theme, setTheme] = useState<string>(() => initialTheme())
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('ttsgrab.theme', dark ? 'dark' : 'light')
-  }, [dark])
-  return { dark, toggle: () => setDark((d) => !d) }
+    applyThemeToDocument(theme)
+  }, [theme])
+  return { theme, setTheme }
 }
 
 export default function App() {
   const { t, i18n } = useTranslation()
-  const { dark, toggle } = useTheme()
+  const { theme, setTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [build, setBuild] = useState<BuildInfo | null>(null)
 
@@ -48,10 +47,10 @@ export default function App() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-20 border-b border-ink-200 bg-white/85 backdrop-blur dark:border-ink-800 dark:bg-ink-950/85">
+      <header className="sticky top-0 z-20 border-b border-line bg-panel/85 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-2.5">
           <NavLink to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent-600 text-sm text-white">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent text-sm text-accent-on">
               t
             </span>
             ttsgrab
@@ -67,8 +66,8 @@ export default function App() {
                   clsx(
                     'rounded-lg px-3 py-1.5 text-sm transition-colors',
                     isActive
-                      ? 'bg-ink-100 font-medium text-ink-900 dark:bg-ink-800 dark:text-white'
-                      : 'text-ink-600 hover:bg-ink-100 dark:text-ink-300 dark:hover:bg-ink-800',
+                      ? 'bg-panel2 font-medium text-text'
+                      : 'text-muted hover:bg-panel2',
                   )
                 }
               >
@@ -87,15 +86,7 @@ export default function App() {
             >
               {i18n.language === 'zh-Hant' ? 'English' : '繁體中文'}
             </button>
-            <button
-              type="button"
-              className="btn-ghost px-2 py-1 text-xs"
-              onClick={toggle}
-              aria-label={t('settings.theme')}
-              data-testid="theme-toggle"
-            >
-              {dark ? '☾' : '☀'}
-            </button>
+            <ThemePicker theme={theme} onPick={setTheme} />
             <button
               type="button"
               className="btn-ghost px-2 py-1 text-xs md:hidden"
@@ -108,7 +99,7 @@ export default function App() {
         </div>
 
         {menuOpen && (
-          <nav className="flex flex-wrap gap-1 border-t border-ink-200 px-4 py-2 md:hidden dark:border-ink-800">
+          <nav className="flex flex-wrap gap-1 border-t border-line px-4 py-2 md:hidden">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
@@ -119,8 +110,8 @@ export default function App() {
                   clsx(
                     'rounded-lg px-2.5 py-1 text-sm',
                     isActive
-                      ? 'bg-ink-100 font-medium dark:bg-ink-800'
-                      : 'text-ink-600 dark:text-ink-300',
+                      ? 'bg-panel2 font-medium'
+                      : 'text-muted',
                   )
                 }
               >
@@ -143,13 +134,13 @@ export default function App() {
         </Routes>
       </main>
 
-      <footer className="border-t border-ink-200 px-4 py-3 text-center text-xs text-ink-500 dark:border-ink-800 dark:text-ink-500">
+      <footer className="border-t border-line px-4 py-3 text-center text-xs text-muted">
         ttsgrab · unified TTS gateway ·{' '}
-        <a className="underline hover:text-accent-500" href="/docs">
+        <a className="underline hover:text-accent" href="/docs">
           API
         </a>{' '}
         ·{' '}
-        <a className="underline hover:text-accent-500" href="/openapi.json">
+        <a className="underline hover:text-accent" href="/openapi.json">
           OpenAPI
         </a>
         {build && (

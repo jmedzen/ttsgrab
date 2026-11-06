@@ -11,7 +11,7 @@ import respx
 
 from ttsgrab.core.types import AudioFormat, SynthRequest
 from ttsgrab.providers.azure import AzureProvider
-from ttsgrab.providers.gemini import GeminiTTSProvider
+from ttsgrab.providers.google_ai_studio import GoogleAIStudioProvider
 from ttsgrab.providers.google_cloud import GoogleCloudProvider, tier_from_voice_id
 
 # --------------------------------------------------------------------------------------
@@ -147,17 +147,18 @@ async def test_google_429_becomes_rate_limited(settings) -> None:
 # --------------------------------------------------------------------------------------
 
 
-def _gemini(settings, keys: list[str]) -> GeminiTTSProvider:
-    settings.gemini.enabled = True
-    settings.gemini.api_keys = keys
-    settings.gemini.model = "gemini-3.8-flash-tts"
-    return GeminiTTSProvider(settings)
+def _studio(settings, free: list[str], paid: list[str] | None = None) -> GoogleAIStudioProvider:
+    settings.google_ai_studio.enabled = True
+    settings.google_ai_studio.free_api_keys = free
+    settings.google_ai_studio.paid_api_keys = paid or []
+    settings.google_ai_studio.model = "gemini-3.8-flash-tts"
+    return GoogleAIStudioProvider(settings)
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_gemini_rotates_to_next_key_on_429(settings) -> None:
-    provider = _gemini(settings, ["free-key-1", "free-key-2"])
+async def test_studio_rotates_to_next_key_on_429(settings) -> None:
+    provider = _studio(settings, ["free-key-1", "free-key-2"])
     await provider.startup()
 
     calls: list[str] = []
@@ -187,7 +188,7 @@ async def test_gemini_rotates_to_next_key_on_429(settings) -> None:
 
     respx.post(url__regex=r".*generateContent$").mock(side_effect=handler)
     result = await provider.synthesize(
-        SynthRequest(text="你好", voice_id="Kore", provider="gemini")
+        SynthRequest(text="你好", voice_id="Kore", provider="google_ai_studio")
     )
     assert result.audio == b"wavdata"
     assert len(calls) >= 2
@@ -197,8 +198,8 @@ async def test_gemini_rotates_to_next_key_on_429(settings) -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_gemini_key_never_leaks_into_result(settings) -> None:
-    provider = _gemini(settings, ["secret-key-abc"])
+async def test_studio_key_never_leaks_into_result(settings) -> None:
+    provider = _studio(settings, ["secret-key-abc"])
     await provider.startup()
     respx.post(url__regex=r".*generateContent$").mock(
         return_value=httpx.Response(
@@ -231,8 +232,8 @@ async def test_gemini_key_never_leaks_into_result(settings) -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_gemini_reports_unsupported_params(settings) -> None:
-    provider = _gemini(settings, ["k"])
+async def test_studio_reports_unsupported_params(settings) -> None:
+    provider = _studio(settings, ["k"])
     await provider.startup()
     respx.post(url__regex=r".*generateContent$").mock(
         return_value=httpx.Response(
@@ -265,10 +266,10 @@ async def test_gemini_reports_unsupported_params(settings) -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_gemini_400_does_not_burn_other_keys(settings) -> None:
+async def test_studio_400_does_not_burn_other_keys(settings) -> None:
     from ttsgrab.core.errors import ProviderError
 
-    provider = _gemini(settings, ["k1", "k2", "k3"])
+    provider = _studio(settings, ["k1", "k2", "k3"])
     await provider.startup()
     calls: list[str] = []
 
@@ -445,3 +446,31 @@ async def test_edge_reports_transcode_need_for_wav(settings, monkeypatch) -> Non
     assert "format" in result.unsupported
     # It still returns audio — the pipeline transcodes downstream.
     assert result.format is AudioFormat.MP3
+
+
+def test_every_builtin_module_actually_registers_its_provider() -> None:
+    """A provider module that imports cleanly but never calls @register is invisible.
+
+    That failure is silent: no warning, no error, the provider simply never appears in
+    /v1/providers and the fallback chain quietly skips it. This caught exactly that when
+    the Gemini adapter was renamed to Google AI Studio.
+    """
+    import importlib
+
+    from ttsgrab.core.registry import BUILTIN_MODULES, registered_classes
+
+    for mod_name in BUILTIN_MODULES:
+        importlib.import_module(mod_name)  # a raise here is the failure we want
+
+    registered = set(registered_classes())
+
+    # Modules whose provider is registered under a different name than the module.
+    aliases = {
+        "ttsgrab.providers.gtts": {"gtts", "translate_tts"},
+    }
+    for mod_name in BUILTIN_MODULES:
+        expected = aliases.get(mod_name, {mod_name.rsplit(".", 1)[1]})
+        assert expected & registered, (
+            f"{mod_name} imported but registered none of {sorted(expected)}; "
+            "is the @register decorator missing?"
+        )

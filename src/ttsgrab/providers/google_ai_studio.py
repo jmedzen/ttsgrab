@@ -1,22 +1,26 @@
-"""Gemini TTS adapter (Gemini API, ``generateContent`` with audio modality).
+"""Google AI Studio TTS adapter (Gemini API, ``generateContent`` with audio modality).
 
 Why this is separate from ``google_cloud``
 ------------------------------------------
-Gemini 3.8 Flash TTS is GA on the **Agent Platform / Gemini API**, but explicitly *not*
-available through the Cloud Text-to-Speech API. Different endpoint, different auth
-(API keys, not service accounts), different pricing, and **no free tier at all**.
+Gemini 3.8 Flash TTS is GA on the **Gemini API / AI Studio**, but explicitly *not* available
+through the Cloud Text-to-Speech API. Different endpoint, different auth (API keys created
+at aistudio.google.com, not service accounts), different pricing.
 
-The "free vs paid key pool" requirement lives here: Gemini API keys created in AI Studio
-carry free-tier rate limits; keys with billing attached do not. The pool tries cheap
-(free) keys first, tracks per-key failures, and fails over — without ever leaking a key
-into logs or responses.
+Free and paid keys are genuinely different
+------------------------------------------
+An AI Studio key with billing attached and one without behave differently: the free tier
+allows a small *number of requests per day* (Gemini TTS was cut to 10 RPD in November 2026),
+while a billed key has a much larger allowance. So the pool keeps two buckets, spends the
+free allowance first, and counts requests per Pacific day — the boundary Google uses. A
+free key that is out of requests is skipped rather than retried until it 429s, because the
+resulting error ("quota exceeded") would otherwise look like an outage to the user.
+
+Keys never leave :mod:`ttsgrab.core.keypool`; the UI sees labels and counters only.
 """
 
 from __future__ import annotations
 
-import itertools
 import time
-from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -27,6 +31,8 @@ from ttsgrab.core.errors import (
     UpstreamAuthError,
     UpstreamRateLimited,
 )
+from ttsgrab.core.keypool import KeyPool
+from ttsgrab.core.registry import register
 from ttsgrab.core.types import (
     AudioFormat,
     Capabilities,
@@ -98,69 +104,65 @@ GEMINI_LANGUAGES = [
 ]
 
 
-@dataclass
-class _KeyState:
-    """Per-key runtime state for the pool. The secret itself never leaves this object."""
+@register
+class GoogleAIStudioProvider(TTSProvider):
+    """Google AI Studio (Gemini API) speech generation."""
 
-    secret: str
-    label: str  # e.g. "free#1", "paid#2" — safe to log
-    paid: bool = False
-    inflight: int = 0
-    failures: int = 0
-    last_used: float = 0.0
-    cooldown_until: float = 0.0
-    requests: int = field(default=0)
-
-
-class GeminiTTSProvider(TTSProvider):
-    name = "gemini"
+    name = "google_ai_studio"
     kind = "cloud"
     official = True
     stability = StabilityRisk.STABLE
     cost_class = CostClass.PAID
     tos_url = "https://ai.google.dev/gemini-api/terms"
-    note = "Gemini 3.8 Flash TTS. No free allowance on Cloud billing; free-API-key pool supported."
+    note = (
+        "Gemini 3.8 Flash TTS via the AI Studio API. Free-tier keys allow only a few "
+        "requests per day; add a billed key for volume."
+    )
 
     def __init__(self, settings) -> None:
         super().__init__(settings)
-        self._cfg = settings.gemini
+        self._cfg = settings.google_ai_studio
         self._client: httpx.AsyncClient | None = None
-        self._keys: list[_KeyState] = []
-        self._rr = itertools.count()
-        self.pool_summary: list[dict[str, Any]] = []
-        self._build_pool()
+        self.pool = KeyPool(
+            free_keys=self._cfg.free_api_keys,
+            paid_keys=self._cfg.paid_api_keys,
+            free_rpd=self._cfg.free_rpd,
+            strategy=self._cfg.strategy,
+        )
 
-    def _build_pool(self) -> None:
-        self._keys = []
-        for i, key in enumerate(self._cfg.api_keys):
-            if not key:
-                continue
-            # Heuristic: keys listed first are treated as free tier. Users can reorder.
-            self._keys.append(_KeyState(secret=key, label=f"key#{i + 1}", paid=False))
-        self._remember_pool_for_ui()
+    # -- key pool management (called from the admin API) --------------------------------
+    def add_key(self, secret: str, *, kind: str = "free") -> str:
+        """Add a key, and switch the provider on.
 
-    def _remember_pool_for_ui(self) -> None:
-        self.pool_summary = [
-            {"label": k.label, "paid": k.paid, "failures": k.failures, "requests": k.requests}
-            for k in self._keys
-        ]
-
-    def add_key(self, secret: str, *, paid: bool = False) -> str:
-        label = f"{'paid' if paid else 'free'}#{len(self._keys) + 1}"
-        self._keys.append(_KeyState(secret=secret, label=label, paid=paid))
-        self._remember_pool_for_ui()
+        Adding a key *is* an expression of intent — nobody pastes an API key into a provider
+        they do not want used. Leaving it disabled would produce the worst kind of bug
+        report: "the key is right there in the list and it still does not work".
+        """
+        if kind not in ("free", "paid"):
+            raise ValueError("kind must be 'free' or 'paid'")
+        label = self.pool.add(secret, kind=kind)  # type: ignore[arg-type]
+        self._cfg.enabled = True
         return label
+
+    def remove_key(self, label: str) -> bool:
+        return self.pool.remove(label)
+
+    def pool_status(self) -> dict[str, Any]:
+        return {"keys": self.pool.public(), **self.pool.summary()}
 
     @property
     def enabled(self) -> bool:
-        return bool(self._cfg.enabled and self._keys)
+        return bool(self._cfg.enabled and len(self.pool))
 
     @property
     def disabled_reason(self) -> str | None:
         if not self._cfg.enabled:
-            return "gemini.enabled=false"
-        if not self._keys:
-            return "No API keys: set GEMINI_API_KEY or add one in the UI"
+            return "google_ai_studio.enabled=false"
+        if not len(self.pool):
+            return (
+                "No API keys: create one at aistudio.google.com, then set "
+                "GOOGLE_AI_STUDIO__FREE_API_KEYS (or add it in Providers)"
+            )
         return None
 
     async def startup(self) -> None:
@@ -209,26 +211,10 @@ class GeminiTTSProvider(TTSProvider):
         ]
 
     # -- key selection ---------------------------------------------------------------------
-    def _pick_key(self) -> _KeyState:
-        now = time.time()
-        usable = [k for k in self._keys if k.cooldown_until <= now]
-        if not usable:
-            # Everything is cooling down; take the one that recovers soonest.
-            usable = sorted(self._keys, key=lambda k: k.cooldown_until)[:1]
-        if not usable:
+    def _pick_key(self):
+        if self.pool.empty:
             raise ProviderUnavailable(self.name, "no API keys configured")
-
-        strategy = self._cfg.strategy
-        if strategy == "round_robin":
-            return usable[next(self._rr) % len(usable)]
-        if strategy == "failover":
-            return sorted(usable, key=lambda k: k.failures)[0]
-        # least_recently_used (default): spread load, prefer free keys
-        return sorted(usable, key=lambda k: (k.paid, k.last_used, k.inflight))[0]
-
-    def _penalise(self, key: _KeyState, *, cooldown_s: float) -> None:
-        key.failures += 1
-        key.cooldown_until = time.time() + cooldown_s
+        return self.pool.pick()
 
     # -- synthesis ---------------------------------------------------------------------------
     async def synthesize(self, req: SynthRequest) -> SynthResult:
@@ -266,13 +252,11 @@ class GeminiTTSProvider(TTSProvider):
 
         started = time.perf_counter()
         last_error: Exception | None = None
-        attempts = max(1, min(len(self._keys), 3))
+        attempts = max(1, min(len(self.pool), 3))
         for _ in range(attempts):
             key = self._pick_key()
             key.inflight += 1
-            key.last_used = time.time()
-            key.requests += 1
-            self._remember_pool_for_ui()
+            self.pool.record_use(key)
             url = f"{self._cfg.base_url}/models/{self._cfg.model}:generateContent"
             try:
                 resp = await self._client.post(
@@ -280,7 +264,7 @@ class GeminiTTSProvider(TTSProvider):
                 )
             except httpx.HTTPError as exc:
                 last_error = ProviderError(self.name, f"request failed: {exc}")
-                self._penalise(key, cooldown_s=10)
+                self.pool.penalise(key, cooldown_s=10)
                 continue
             finally:
                 key.inflight -= 1
@@ -300,17 +284,17 @@ class GeminiTTSProvider(TTSProvider):
                     voice_id=req.voice_id,
                     unsupported=sorted(set(bad)),
                     billed_characters=chars,
-                    used_free_tier=not key.paid,
+                    used_free_tier=(key.kind == "free"),
                     latency_ms=int((time.perf_counter() - started) * 1000),
-                    extra={"key": (key.paid and "paid") or "free", "model": self._cfg.model},
+                    extra={"key": key.label, "key_kind": key.kind, "model": self._cfg.model},
                 )
 
             if resp.status_code in (401, 403):
-                self._penalise(key, cooldown_s=300)
+                self.pool.penalise(key, cooldown_s=300)
                 last_error = UpstreamAuthError(self.name, f"key {key.label} rejected")
                 continue
             if resp.status_code == 429:
-                self._penalise(key, cooldown_s=60)
+                self.pool.penalise(key, cooldown_s=60)
                 last_error = UpstreamRateLimited(self.name, f"key {key.label} rate limited")
                 continue
             # 400 usually means the model id or voice name is wrong — do not burn more keys.

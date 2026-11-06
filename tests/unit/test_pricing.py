@@ -77,9 +77,9 @@ def test_studio_is_the_expensive_one(pricing: PricingTable) -> None:
     assert cost == 160_000_000
 
 
-def test_gemini_has_no_free_allowance(pricing: PricingTable) -> None:
+def test_google_ai_studio_has_no_free_allowance(pricing: PricingTable) -> None:
     cost, free = compute_cost_micro_usd(
-        pricing, provider="gemini", tier="gemini-tts", characters=10_000
+        pricing, provider="google_ai_studio", tier="gemini-tts", characters=10_000
     )
     assert cost > 0
     assert free is False

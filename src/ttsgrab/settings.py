@@ -72,16 +72,27 @@ class GoogleCloudSettings(BaseModel):
     respect_free_tier: bool = True
 
 
-class GeminiTTSSettings(BaseModel):
-    """Gemini TTS goes through the Gemini API, not Cloud TTS — separate credentials."""
+class GoogleAIStudioSettings(BaseModel):
+    """Google AI Studio (Gemini API) TTS — separate credentials from Cloud TTS.
+
+    Free and paid keys are configured separately because they have different allowances.
+    A free AI Studio key is limited to a handful of *requests per day* (Gemini TTS was cut
+    to 10 RPD in November 2026), which is far below what a single long article needs; a key
+    with billing attached has a much larger allowance. Keeping the two lists apart is what
+    lets the pool spend the free allowance first and only then bill.
+    """
 
     enabled: bool = False
     model: str = "gemini-3.8-flash-tts"
     base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    # Key pool. First N come from env; the rest can be added at runtime via the UI.
-    api_keys: list[str] = Field(default_factory=list)
-    # free tier is rate-limited, paid keys are not. Kept per key.
-    strategy: Literal["round_robin", "least_recently_used", "failover"] = "least_recently_used"
+    # Keys with no billing attached: few requests per day.
+    free_api_keys: list[str] = Field(default_factory=list)
+    # Keys on a billed project: no daily request cap, billed per use.
+    paid_api_keys: list[str] = Field(default_factory=list)
+    # Daily request allowance per free key. Configurable because Google has moved it
+    # more than once and an operator may be on a different tier than the default.
+    free_rpd: int = 10
+    strategy: Literal["free_first", "round_robin", "least_used"] = "free_first"
     monthly_budget_chars: int = 0
     monthly_budget_micro_usd: int = 0
 
@@ -143,7 +154,7 @@ class RouterSettings(BaseModel):
             "edge",
             "google_cloud",
             "azure",
-            "gemini",
+            "google_ai_studio",
             "kokoro",
             "cosyvoice",
             "gpt_sovits",
@@ -203,7 +214,7 @@ class Settings(BaseSettings):
     edge: EdgeSettings = Field(default_factory=EdgeSettings)
     free_web: FreeWebSettings = Field(default_factory=FreeWebSettings)
     google_cloud: GoogleCloudSettings = Field(default_factory=GoogleCloudSettings)
-    gemini: GeminiTTSSettings = Field(default_factory=GeminiTTSSettings)
+    google_ai_studio: GoogleAIStudioSettings = Field(default_factory=GoogleAIStudioSettings)
     azure: AzureSettings = Field(default_factory=AzureSettings)
     cache: CacheSettings = Field(default_factory=CacheSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)
@@ -245,7 +256,7 @@ class Settings(BaseSettings):
 _ENV_SECRETS = {
     "GOOGLE_APPLICATION_CREDENTIALS": ("google_cloud", "credentials_file"),
     "GOOGLE_CLOUD_TTS_API_KEY": ("google_cloud", "api_key"),
-    "GEMINI_API_KEY": ("gemini", "api_keys"),
+    "GEMINI_API_KEY": ("google_ai_studio", "free_api_keys"),
     "AZURE_SPEECH_KEY": ("azure", "api_key"),
     "TTSGRAB_ADMIN_TOKEN": ("security", "admin_token"),
 }
@@ -253,7 +264,7 @@ _ENV_SECRETS = {
 _SECRET_FILE_VARS = {
     # Docker secret style: VAR_FILE points at a file whose content is the secret.
     "GOOGLE_APPLICATION_CREDENTIALS_FILE": ("google_cloud", "credentials_file"),
-    "GEMINI_API_KEY_FILE": ("gemini", "api_keys"),
+    "GEMINI_API_KEY_FILE": ("google_ai_studio", "free_api_keys"),
     "AZURE_SPEECH_KEY_FILE": ("azure", "api_key"),
 }
 

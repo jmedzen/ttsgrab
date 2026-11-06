@@ -53,7 +53,7 @@ export default function Voices() {
     <div className="space-y-4">
       <header>
         <h1 className="text-xl font-semibold">{t('voices.title')}</h1>
-        <p className="text-sm text-ink-500">{t('voices.subtitle')}</p>
+        <p className="text-sm text-muted">{t('voices.subtitle')}</p>
       </header>
 
       <section className="card space-y-3 p-4">
@@ -91,11 +91,11 @@ export default function Voices() {
           <AudioPlayer key={previewUrl} src={previewUrl} autoPlay />
         )}
         {previewError && (
-          <p className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
+          <p className="text-xs text-bad">{previewError}</p>
         )}
       </section>
 
-      <p className="text-xs text-ink-500">
+      <p className="text-xs text-muted">
         {isLoading
           ? t('common.loading')
           : isError
@@ -114,7 +114,7 @@ export default function Voices() {
                   <div className="truncate text-sm font-medium" title={v.name}>
                     {v.name}
                   </div>
-                  <div className="truncate font-mono text-[11px] text-ink-500">{v.voice_id}</div>
+                  <div className="truncate font-mono text-[11px] text-muted">{v.voice_id}</div>
                 </div>
                 <button
                   type="button"
@@ -126,28 +126,28 @@ export default function Voices() {
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-1">
-                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                <span className="badge bg-panel2 text-muted">
                   {v.provider}
                 </span>
-                <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                <span className="badge bg-panel2 text-muted">
                   {v.languages.slice(0, 2).join(' / ')}
                 </span>
                 {v.gender !== 'unknown' && (
-                  <span className="badge bg-ink-100 text-ink-600 dark:bg-ink-800 dark:text-ink-300">
+                  <span className="badge bg-panel2 text-muted">
                     {v.gender}
                   </span>
                 )}
                 {v.cost_class === 'free' ? (
-                  <span className="badge bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                  <span className="badge bg-ok/15 text-ok">
                     {t('common.free')}
                   </span>
                 ) : (
-                  <span className="badge bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  <span className="badge bg-warn/15 text-warn">
                     {formatUsd(v.price_usd_per_mchar * 1_000_000)}/1M
                   </span>
                 )}
                 {v.cloning && (
-                  <span className="badge bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400">
+                  <span className="badge bg-accent/15 text-accent">
                     clone
                   </span>
                 )}
@@ -158,7 +158,7 @@ export default function Voices() {
       )}
 
       {!isLoading && !isError && (data?.voices ?? []).length === 0 && (
-        <p className="py-12 text-center text-sm text-ink-500">{t('voices.empty')}</p>
+        <p className="py-12 text-center text-sm text-muted">{t('voices.empty')}</p>
       )}
     </div>
   )

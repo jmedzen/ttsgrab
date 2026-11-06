@@ -194,3 +194,84 @@ async def capabilities(ctx: Ctx) -> dict[str, Any]:
         "openai_compatible": "/v1/audio/speech",
         "mcp": "/mcp",
     }
+
+
+# -- Google AI Studio key pool --------------------------------------------------------------
+# Keys are managed at runtime because the whole point of the free tier is that it is small:
+# an operator adds a second free key, or a paid one, without editing .env and restarting.
+# Every route here is admin-only — a key pool is a billing surface.
+
+
+def _studio(ctx):
+    provider = ctx.registry.get("google_ai_studio")
+    if provider is None:
+        raise NotFound("google_ai_studio provider is not registered")
+    return provider
+
+
+@router.get(
+    "/v1/providers/google_ai_studio/keys",
+    summary="List the Google AI Studio key pool (labels and counters, never secrets)",
+)
+async def list_studio_keys(ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
+    provider = _studio(ctx)
+    status = provider.pool_status()
+    status["enabled"] = provider.enabled
+    status["reason"] = provider.disabled_reason
+    return status
+
+
+@router.post(
+    "/v1/providers/google_ai_studio/keys",
+    summary="Add a free or paid Google AI Studio API key",
+)
+async def add_studio_key(body: dict[str, Any], ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
+    provider = _studio(ctx)
+    secret = (body.get("key") or "").strip()
+    kind = (body.get("kind") or "free").strip()
+    if not secret:
+        raise InvalidRequest("`key` is required")
+    if kind not in ("free", "paid"):
+        raise InvalidRequest("`kind` must be 'free' or 'paid'")
+    try:
+        label = provider.add_key(secret, kind=kind)
+    except ValueError as exc:
+        # Duplicate key or empty key: both are user errors, not outages.
+        raise InvalidRequest(str(exc)) from exc
+    await write_audit(
+        ctx,
+        principal=principal,
+        action="provider.key_added",
+        target="google_ai_studio",
+        detail={"label": label, "kind": kind},
+    )
+    await _refresh_studio(ctx)
+    return {"label": label, "kind": kind, **provider.pool_status()}
+
+
+@router.delete(
+    "/v1/providers/google_ai_studio/keys/{label}",
+    summary="Remove a key from the pool by its label",
+)
+async def delete_studio_key(label: str, ctx: Ctx, principal: AdminDep) -> dict[str, Any]:
+    provider = _studio(ctx)
+    if not provider.remove_key(label):
+        raise NotFound(f"no key labelled {label!r}")
+    await write_audit(
+        ctx,
+        principal=principal,
+        action="provider.key_removed",
+        target="google_ai_studio",
+        detail={"label": label},
+    )
+    await _refresh_studio(ctx)
+    return {"removed": label, **provider.pool_status()}
+
+
+async def _refresh_studio(ctx) -> None:
+    """Re-fetch voices so a newly enabled provider appears without a restart."""
+    provider = ctx.registry.get("google_ai_studio")
+    if provider is None:
+        return
+    with contextlib.suppress(Exception):
+        await provider.refresh_voices()
