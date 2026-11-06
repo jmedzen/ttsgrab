@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, formatUsd, type Voice } from '../lib/api'
 import AudioPlayer from '../components/AudioPlayer'
+import { FavouriteStar } from '../components/Favourites'
+import { usePins } from '../lib/usePins'
 
 const PREVIEW_TEXT = '這是語音試聽。This is a preview.'
 
@@ -16,6 +18,8 @@ export default function Voices() {
   const [previewing, setPreviewing] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
+
+  const { rows: favourites } = usePins()
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['voices', { search, language, provider, freeOnly }],
@@ -55,6 +59,34 @@ export default function Voices() {
         <h1 className="text-xl font-semibold">{t('voices.title')}</h1>
         <p className="text-sm text-muted">{t('voices.subtitle')}</p>
       </header>
+
+      {favourites.length > 0 && (
+        <section className="card space-y-2 p-4" data-testid="voices-favourites">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold">
+              <span className="mr-1 text-warn">★</span>
+              {t('voices.favouritesTitle')}
+            </h2>
+            <span className="text-xs text-muted-soft">
+              {t('voices.favouritesCount', { count: favourites.length })}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {favourites.map((f) => (
+              <span
+                key={f.voice_id}
+                className="inline-flex items-center gap-1 rounded-full border border-warn/40 bg-warn/5 px-2.5 py-1 text-xs"
+                data-testid={`voices-favourite-${f.voice_id}`}
+              >
+                <span className="max-w-[16rem] truncate" title={f.voice_id}>
+                  {f.name ?? f.voice_id}
+                </span>
+                {f.provider && <span className="text-muted-soft">{f.provider}</span>}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="card space-y-3 p-4">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_160px_auto]">
@@ -116,14 +148,17 @@ export default function Voices() {
                   </div>
                   <div className="truncate font-mono text-[11px] text-muted">{v.voice_id}</div>
                 </div>
-                <button
-                  type="button"
-                  className="btn-ghost shrink-0 px-2 py-1 text-xs"
-                  onClick={() => preview(v)}
-                  disabled={previewing === v.voice_id}
-                >
-                  {previewing === v.voice_id ? '…' : '▶'}
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    className="btn-ghost px-2 py-1 text-xs"
+                    onClick={() => preview(v)}
+                    disabled={previewing === v.voice_id}
+                  >
+                    {previewing === v.voice_id ? '…' : '▶'}
+                  </button>
+                  <FavouriteStar voiceId={v.voice_id} />
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 <span className="badge bg-panel2 text-muted">

@@ -131,11 +131,21 @@ test.describe('provider → voice follow', () => {
 })
 
 test.describe('voice pinning', () => {
+  // Server-side now, so isolation has to be explicit.
+  test.beforeEach(async ({ request }) => {
+    const res = await request.get('/v1/favourites')
+    if (!res.ok()) return
+    const { favourites } = (await res.json()) as { favourites: { voice_id: string }[] }
+    for (const f of favourites) {
+      await request.delete(`/v1/favourites/${encodeURIComponent(f.voice_id)}`)
+    }
+  })
+
   test('a pinned voice appears in a pinned section and survives a reload', async ({ page }) => {
     await page.goto('/')
 
     await page.getByTestId('voice-select').click()
-    const firstPin = page.locator('[data-testid^="pin-"]').first()
+    const firstPin = page.locator('[data-testid^="pin-"]:not([data-testid^="pin-pinned-"])').first()
     const pinTestId = await firstPin.getAttribute('data-testid')
     expect(pinTestId).toBeTruthy()
 
@@ -174,17 +184,32 @@ test.describe('voice pinning', () => {
 })
 
 test.describe('favourites in the playground', () => {
+  // The shortlist lives on the server now, so it is shared across tests in a way the old
+  // localStorage version was not. Clear it before each test or one test's star is the next
+  // test's unstar.
+  test.beforeEach(async ({ request }) => {
+    const res = await request.get('/v1/favourites')
+    if (!res.ok()) return
+    const { favourites } = (await res.json()) as { favourites: { voice_id: string }[] }
+    for (const f of favourites) {
+      await request.delete(`/v1/favourites/${encodeURIComponent(f.voice_id)}`)
+    }
+  })
+
   test('starring the current voice adds it to the favourites row', async ({ page }) => {
     await page.goto('/')
-    const row = page.getByTestId('favourites')
-    await expect(row).toBeVisible()
+    // Before anything is pinned the chip row is absent entirely — an empty box holding
+    // only the words "add to favourites" read as instructions, not a control.
+    await expect(page.getByTestId('favourites')).toHaveCount(0)
 
     const toggle = page.getByTestId('favourite-toggle')
+    await expect(toggle).toBeVisible()
     await expect(toggle).toHaveAttribute('aria-pressed', 'false')
 
     await toggle.click()
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
-    // A chip appears for the voice, and the counter is a real count.
+    const row = page.getByTestId('favourites')
+    await expect(row).toBeVisible()
     await expect(row.locator('[data-testid^="favourite-remove-"]')).toHaveCount(1)
     await expect(row).toContainText('1/')
   })
@@ -230,6 +255,18 @@ test.describe('favourites in the playground', () => {
     await expect(page.locator('[data-testid^="favourite-remove-"]')).toHaveCount(0)
   })
 
+  test('the star sits next to the voice picker, on the same line', async ({ page }) => {
+    await page.goto('/')
+    // Position is the whole point: this control was once in its own row below and read as
+    // a caption. Asserting geometry keeps it there.
+    const star = await page.getByTestId('favourite-toggle').boundingBox()
+    const picker = await page.getByTestId('voice-select').boundingBox()
+    expect(star).not.toBeNull()
+    expect(picker).not.toBeNull()
+    expect(Math.abs(star!.y - picker!.y)).toBeLessThan(2)
+    expect(star!.x).toBeGreaterThan(picker!.x + picker!.width - 1)
+  })
+
   test('the star in the picker and the playground stay in step', async ({ page }) => {
     // Two components read the same store; a change in one must reach the other without a
     // reload.
@@ -261,7 +298,8 @@ test.describe('favourites in the playground', () => {
     await page.addInitScript(() => localStorage.setItem('ttsgrab.lang', 'zh-Hant'))
     await page.goto('/')
     await page.reload()
-    await expect(page.getByTestId('favourite-toggle')).toContainText('加入最愛')
+    // The star is an icon now, so the translated string lives in the accessible name.
+    await expect(page.getByTestId('favourite-toggle')).toHaveAttribute('aria-label', '加入最愛')
     // The document language must match what is actually rendered.
     expect(await page.evaluate(() => document.documentElement.lang)).toBe('zh-Hant')
   })

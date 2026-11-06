@@ -229,3 +229,27 @@ class ApiKeyUsage(Base):  # pragma: no cover - superseded by UsageEvent rollups
     day: Mapped[str] = mapped_column(String(10), index=True)
     characters: Mapped[int] = mapped_column(Integer, default=0)
     requests: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class FavouriteVoice(Base):
+    """A voice someone starred, stored server-side.
+
+    Deliberately NOT per-browser storage. This gateway is deployed by one person or a small
+    team against a shared instance; keeping favourites in localStorage means they vanish
+    when you switch from laptop to phone, which is the opposite of what "favourite" implies.
+    The table is small (tens of rows), has no secrets, and is shared by everyone who can
+    reach the UI — the same model as the voice catalogue itself.
+
+    Ordering is explicit rather than by timestamp so a user can arrange the row.
+    """
+
+    __tablename__ = "favourite_voices"
+
+    voice_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Denormalised so the favourites list still renders when a provider is disabled and its
+    # voices drop out of /v1/voices. Without this an unavailable favourite would be an
+    # anonymous id in the UI.
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

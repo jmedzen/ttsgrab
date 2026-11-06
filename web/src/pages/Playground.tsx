@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, ApiRequestError, formatMs, formatUsd, type AudioFormat, type Policy, type TTSResult } from '../lib/api'
 import AudioPlayer from '../components/AudioPlayer'
 import VoiceSelect from '../components/VoiceSelect'
-import Favourites from '../components/Favourites'
+import Favourites, { FavouriteStar } from '../components/Favourites'
 
 const SAMPLE_ZH = '你好，這是 ttsgrab 的語音合成測試。這一句用來確認繁體中文的發音與語氣。'
 const SAMPLE_EN = 'Hello — this is a ttsgrab synthesis test. This sentence checks prosody and timing.'
@@ -155,14 +155,22 @@ export default function Playground() {
             <label className="label" id="voice-label">
               {t('playground.voiceLabel')}
             </label>
-            <VoiceSelect
-              value={voice}
-              onChange={(v) => setVoice(v.voice_id)}
-              // Restricting the list to the chosen provider keeps the two controls
-              // consistent; the picker also re-selects a valid voice when this changes.
-              filterProvider={provider || null}
-              ariaLabelledBy="voice-label"
-            />
+            {/* The star sits *inside* the voice field, right of the picker. Putting it in
+                its own row below made it read as a caption — it took a report of "where is
+                it?" twice to notice. A control belongs where the eye already is. */}
+            <div className="flex items-stretch gap-1">
+              <div className="min-w-0 flex-1">
+                <VoiceSelect
+                  value={voice}
+                  onChange={(v) => setVoice(v.voice_id)}
+                  // Restricting the list to the chosen provider keeps the two controls
+                  // consistent; the picker also re-selects a valid voice when this changes.
+                  filterProvider={provider || null}
+                  ariaLabelledBy="voice-label"
+                />
+              </div>
+              <FavouriteStar voiceId={voice} />
+            </div>
           </div>
         </div>
 

@@ -91,6 +91,7 @@ const zhHant: Translation = {
     reload: '重新載入',
   },
   favourites: {
+    rowLabel: '最愛語音',
     add: '加入最愛',
     saved: '已加入最愛',
     remove: '移出最愛',
@@ -102,6 +103,9 @@ const zhHant: Translation = {
     clearUnavailable: '清除無法使用的最愛',
   },
   voices: {
+    favouritesTitle: '我的最愛',
+    favouritesCount: '已收藏 {{count}} 個',
+    unavailableTitle: '這些語音的供應商已停用，目前無法合成。',
     loadFailed: '無法載入語音清單。請確認管理員權杖後重試。',
     pin: '釘選 {{name}}',
     unpin: '取消釘選 {{name}}',

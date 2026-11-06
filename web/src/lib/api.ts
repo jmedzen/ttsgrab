@@ -9,6 +9,15 @@ export type Policy =
   | 'free_only'
   | 'explicit'
 
+/** A starred voice as stored server-side (shared by everyone using this instance). */
+export interface FavouriteVoice {
+  voice_id: string
+  provider: string | null
+  name: string | null
+  position: number
+  created_at: string
+}
+
 export interface Voice {
   provider: string
   voice_id: string
@@ -333,6 +342,21 @@ export const api = {
     if (params.freeOnly) q.set('free_only', 'true')
     if (params.cloning !== undefined) q.set('cloning', String(params.cloning))
     return json(`/v1/voices?${q.toString()}`)
+  },
+
+  async favourites(): Promise<{ favourites: FavouriteVoice[] }> {
+    return json('/v1/favourites')
+  },
+
+  async addFavourite(v: { voiceId: string; provider?: string; name?: string }): Promise<void> {
+    await json('/v1/favourites', {
+      method: 'POST',
+      body: JSON.stringify({ voice_id: v.voiceId, provider: v.provider, name: v.name }),
+    })
+  },
+
+  async removeFavourite(voiceId: string): Promise<void> {
+    await json(`/v1/favourites/${encodeURIComponent(voiceId)}`, { method: 'DELETE' })
   },
 
   async providers(): Promise<{

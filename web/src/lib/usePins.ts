@@ -1,64 +1,118 @@
 /**
- * Shared favourites state.
+ * Favourite voices, read from and written to the gateway.
  *
- * The pins live in localStorage (see `lib/pins.ts` for why) but two components need to see
- * the same list: the voice picker, and the Playground's own star button and quick-switch
- * row. Keeping a `useState` in each would let them drift — you star a voice in the
- * Playground and the picker's pinned group does not notice until a reload.
+ * These used to live in localStorage. That was wrong for what this product is: one person
+ * or a small team running a single instance. Starring a voice on your laptop and not
+ * finding it on your phone is not a "favourite", it is a bookmark. The server is the right
+ * home, and `/v1/favourites` is a table of tens of rows with nothing sensitive in it.
  *
- * A module-level listener set is used rather than React context so the state survives
- * components that are mounted independently of any provider, and so a second tab's
- * change (via the `storage` event) also lands.
+ * TanStack Query owns the cache so both the Playground star and the Voices page read one
+ * source. Mutations are optimistic: starring is a UI gesture, and waiting for a round trip
+ * before the star fills in feels broken on a slow link.
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import { loadPins, MAX_PINS, savePins, togglePin } from './pins'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { api, type FavouriteVoice } from './api'
 
-type Listener = (ids: string[]) => void
+/** Mirrors MAX_FAVOURITES in the API; the server is still the authority. */
+export const MAX_PINS = 24
 
-const listeners = new Set<Listener>()
-
-function publish(ids: string[]): void {
-  for (const fn of listeners) fn(ids)
-}
+const KEY = ['favourites'] as const
 
 export interface PinsApi {
   pins: string[]
+  rows: FavouriteVoice[]
   isPinned: (voiceId: string | null) => boolean
-  toggle: (voiceId: string) => void
+  toggle: (voiceId: string, meta?: { provider?: string; name?: string }) => void
   atLimit: boolean
   max: number
+  isLoading: boolean
 }
 
 export function usePins(): PinsApi {
-  const [pins, setPins] = useState<string[]>(() => loadPins())
+  const qc = useQueryClient()
 
-  useEffect(() => {
-    const fn: Listener = (ids) => setPins(ids)
-    listeners.add(fn)
-    // Another tab pinning something must show up here too, without a refresh.
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === null || e.key === 'ttsgrab.pinnedVoices') setPins(loadPins())
-    }
-    window.addEventListener('storage', onStorage)
-    return () => {
-      listeners.delete(fn)
-      window.removeEventListener('storage', onStorage)
-    }
-  }, [])
+  const { data, isLoading } = useQuery({
+    queryKey: KEY,
+    queryFn: () => api.favourites(),
+    // The list changes only when someone stars something, and it is shared, so a stale
+    // copy for half a minute is harmless.
+    staleTime: 30_000,
+  })
 
-  const toggle = useCallback((voiceId: string) => {
-    // Read the canonical list rather than the local copy: two components toggling in the
-    // same tick would otherwise each apply their stale snapshot and lose one change.
-    const next = togglePin(loadPins(), voiceId)
-    savePins(next)
-    publish(next)
-  }, [])
+  const rows = data?.favourites ?? []
 
-  const isPinned = useCallback((voiceId: string | null) => {
-    if (!voiceId) return false
-    return pins.includes(voiceId)
-  }, [pins])
+  const add = useMutation({
+    mutationFn: (v: { voiceId: string; provider?: string; name?: string }) => api.addFavourite(v),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: KEY })
+      const previous = qc.getQueryData<{ favourites: FavouriteVoice[] }>(KEY)
+      qc.setQueryData<{ favourites: FavouriteVoice[] }>(KEY, {
+        favourites: [
+          ...(previous?.favourites ?? []),
+          {
+            voice_id: v.voiceId,
+            provider: v.provider ?? null,
+            name: v.name ?? null,
+            position: previous?.favourites.length ?? 0,
+            created_at: new Date().toISOString(),
+          },
+        ],
+      })
+      return { previous }
+    },
+    onError: (_e, _v, ctx) => {
+      // Roll back: a star that silently failed is worse than one that never lit.
+      if (ctx?.previous) qc.setQueryData(KEY, ctx.previous)
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: KEY }),
+  })
 
-  return { pins, isPinned, toggle, atLimit: pins.length >= MAX_PINS, max: MAX_PINS }
+  const remove = useMutation({
+    mutationFn: (voiceId: string) => api.removeFavourite(voiceId),
+    onMutate: async (voiceId) => {
+      await qc.cancelQueries({ queryKey: KEY })
+      const previous = qc.getQueryData<{ favourites: FavouriteVoice[] }>(KEY)
+      qc.setQueryData<{ favourites: FavouriteVoice[] }>(KEY, {
+        favourites: (previous?.favourites ?? []).filter((f) => f.voice_id !== voiceId),
+      })
+      return { previous }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(KEY, ctx.previous)
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: KEY }),
+  })
+
+  const pins = rows.map((r) => r.voice_id)
+
+  const isPinned = useCallback(
+    (voiceId: string | null) => Boolean(voiceId) && pins.includes(voiceId as string),
+    [pins],
+  )
+
+  const toggle = useCallback(
+    (voiceId: string, meta?: { provider?: string; name?: string }) => {
+      if (pins.includes(voiceId)) {
+        remove.mutate(voiceId)
+        return
+      }
+      if (pins.length >= MAX_PINS) return
+      add.mutate({ voiceId, provider: meta?.provider, name: meta?.name })
+    },
+    // `add`/`remove` are stable mutation objects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pins],
+  )
+
+  return {
+    pins,
+    rows,
+    isPinned,
+    toggle,
+    atLimit: pins.length >= MAX_PINS,
+    max: MAX_PINS,
+    isLoading,
+  }
 }

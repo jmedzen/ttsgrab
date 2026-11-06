@@ -142,6 +142,24 @@ class CacheSettings(BaseModel):
     ttl_seconds: int = 30 * 24 * 3600
 
 
+class FavouritesSettings(BaseModel):
+    """Initial favourite voices, declared in config.yaml.
+
+    Favourites are normally clicked in the UI and stored in the database. This section
+    exists so a deployment can ship a sensible shortlist — the four voices your team
+    actually uses — instead of everyone re-starring them after a fresh install.
+
+    Seeding is additive and idempotent: entries already present are left alone, never
+    removed. Deleting a seeded favourite in the UI must stick, so this is applied only
+    when the table is empty.
+    """
+
+    seed: list[str] = Field(default_factory=list)
+    # Off by default: an existing deployment that never mentioned favourites should not
+    # have rows appear because of an upgrade.
+    seed_enabled: bool = False
+
+
 class RouterSettings(BaseModel):
     default_policy: Literal[
         "cheapest", "fastest", "best_quality", "local_only", "free_only", "explicit"
@@ -223,6 +241,7 @@ class Settings(BaseSettings):
     cache: CacheSettings = Field(default_factory=CacheSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)
     router: RouterSettings = Field(default_factory=RouterSettings)
+    favourites: FavouritesSettings = Field(default_factory=FavouritesSettings)
     workers: WorkerRegistrySettings = Field(default_factory=WorkerRegistrySettings)
     longform: LongFormSettings = Field(default_factory=LongFormSettings)
 

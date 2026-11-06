@@ -231,13 +231,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # -- routers ---------------------------------------------------------------------------
     from ttsgrab.api import docs as docs_api
-    from ttsgrab.api.v1 import catalogue, data, jobs, keys, openai_compat, tts, workers
+    from ttsgrab.api.v1 import (
+        catalogue,
+        data,
+        favourites,
+        jobs,
+        keys,
+        openai_compat,
+        tts,
+        workers,
+    )
 
     app.include_router(tts.router)
     app.include_router(catalogue.router)
     app.include_router(data.router)
     app.include_router(workers.router)
     app.include_router(keys.router)
+    app.include_router(favourites.router)
     app.include_router(jobs.router)
     app.include_router(openai_compat.router)
     app.include_router(docs_api.router)

@@ -358,3 +358,23 @@ def test_a_developers_dotenv_does_not_leak_into_the_test_suite() -> None:
     import os
 
     assert os.environ.get("TTSGRAB_IGNORE_ENV_FILE") == "1"
+
+
+def test_favourites_seed_is_off_by_default() -> None:
+    """An upgrade must not invent favourite rows.
+
+    Seeding is opt-in: a deployment that never mentioned favourites should look exactly
+    the same after upgrading.
+    """
+    from ttsgrab.settings import Settings
+
+    s = Settings()
+    assert s.favourites.seed_enabled is False
+    assert s.favourites.seed == []
+
+
+def test_favourites_seed_accepts_a_list() -> None:
+    from ttsgrab.settings import Settings
+
+    s = Settings(favourites={"seed_enabled": True, "seed": ["a", "b"]})
+    assert s.favourites.seed == ["a", "b"]

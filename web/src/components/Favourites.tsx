@@ -5,7 +5,63 @@ import { useTranslation } from 'react-i18next'
 import { api, type Voice } from '../lib/api'
 import { usePins } from '../lib/usePins'
 
-interface Props {
+/**
+ * The star button that lives immediately right of the voice picker.
+ *
+ * Sized and bordered like the picker itself so it reads as part of the form control rather
+ * than as decoration. An earlier version put "☆ Add to favourites" in a full-width row
+ * below the provider/voice row; that looked like a caption, and a reader looking for the
+ * feature asked where it was twice. Position beats labelling.
+ */
+export function FavouriteStar({ voiceId }: { voiceId: string | null }) {
+  const { t } = useTranslation()
+  const { isPinned, toggle, atLimit, max } = usePins()
+
+  // The provider and display name are stored alongside the id so the favourites list can
+  // render a disabled provider's voice by name instead of showing a bare voice id.
+  const { data } = useQuery({
+    queryKey: ['voices', 'all'],
+    queryFn: () => api.voices(),
+    enabled: Boolean(voiceId),
+  })
+  const live = data?.voices.find((v) => v.voice_id === voiceId)
+  const pinned = isPinned(voiceId)
+  const blocked = !pinned && atLimit
+
+  return (
+    <button
+      type="button"
+      className={clsx(
+        'flex w-11 shrink-0 items-center justify-center rounded-md border text-lg transition-colors',
+        pinned
+          ? 'border-warn/50 bg-warn/10 text-warn'
+          : 'border-line bg-panel text-muted hover:border-warn/40 hover:text-warn',
+        (!voiceId || blocked) && 'cursor-not-allowed opacity-40',
+      )}
+      disabled={!voiceId || blocked}
+      onClick={() =>
+        voiceId &&
+        toggle(voiceId, { provider: live?.provider, name: live?.name })
+      }
+      aria-pressed={pinned}
+      aria-label={pinned ? t('favourites.remove') : t('favourites.add')}
+      data-testid="favourite-toggle"
+      title={
+        !voiceId
+          ? t('favourites.noneSelected')
+          : blocked
+            ? t('favourites.limitReached', { max })
+            : pinned
+              ? t('favourites.remove')
+              : t('favourites.add')
+      }
+    >
+      <span aria-hidden="true">{pinned ? '★' : '☆'}</span>
+    </button>
+  )
+}
+
+interface RowProps {
   /** The voice currently selected in the Playground. */
   currentId: string | null
   /** Restricts which favourites are offered, mirroring the provider selector. */
@@ -14,134 +70,93 @@ interface Props {
 }
 
 /**
- * Favourite voices, one click from the Playground.
+ * Quick-switch chips for the voices you keep coming back to.
  *
- * The star in the picker already worked, but it was two levels down: open the dropdown,
- * find the row, hit a small star that is invisible until you hover it. This puts the two
- * actions where the playback controls are — star the voice you are listening to, and jump
- * between the ones you keep coming back to.
- *
- * Choosing a favourite deliberately does **not** synthesise. Switching what you are about
- * to say and pressing Synthesise is one decision; making the second click spend money (or
- * a free request) is not something the user asked for here.
+ * Renders nothing at all when there is nothing to show. An always-present box holding only
+ * the words "Add to favourites" was the earlier version, and it read as a paragraph of
+ * instructions sitting in the middle of the form.
  */
-export default function Favourites({ currentId, filterProvider, onPick }: Props) {
+export default function Favourites({ currentId, filterProvider, onPick }: RowProps) {
   const { t } = useTranslation()
-  const { pins, isPinned, toggle, atLimit, max } = usePins()
+  const { rows, toggle, max } = usePins()
 
-  // Shares the picker's cache key, so opening this row costs no extra request and the two
-  // views can never disagree about which provider a voice belongs to.
+  // Shares the picker's cache key, so this row costs no extra request and the two views
+  // can never disagree about which provider a voice belongs to.
   const { data } = useQuery({
     queryKey: ['voices', filterProvider ?? 'all'],
     queryFn: () => api.voices({ provider: filterProvider ?? undefined }),
   })
   const available = useMemo(() => data?.voices ?? [], [data])
-  const current = useMemo(
-    () => available.find((v) => v.voice_id === currentId) ?? null,
-    [available, currentId],
-  )
 
-  const currentPinned = isPinned(current?.voice_id ?? null)
-  const resolved = pins
-    .map((id) => available.find((v) => v.voice_id === id))
-    .filter((v): v is Voice => Boolean(v))
+  // Server rows carry a denormalised name, so a favourite whose provider is currently
+  // disabled still shows as a name with its provider rather than as a raw id.
+  const resolved = rows.map((row) => {
+    const live = available.find((v) => v.voice_id === row.voice_id)
+    return {
+      voiceId: row.voice_id,
+      label: live?.name ?? row.name ?? row.voice_id,
+      language: live?.languages[0] ?? null,
+      provider: live?.provider ?? row.provider,
+      live: Boolean(live),
+    }
+  })
 
-  // Pin ids that no longer resolve (provider disabled, worker evicted). Shown so the user
-  // can see why a favourite vanished and clear it, rather than silently losing it.
-  const stale = pins.filter((id) => !available.some((v) => v.voice_id === id))
+  const staleCount = resolved.filter((r) => !r.live).length
+
+  if (rows.length === 0) return null
 
   return (
-    <div className="mt-3 rounded-lg border border-line bg-panel2/60 px-3 py-2" data-testid="favourites">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
+    <div
+      className="mt-2 flex flex-wrap items-center gap-1.5 text-xs"
+      data-testid="favourites"
+      aria-label={t('favourites.rowLabel')}
+    >
+      <span className="text-warn" aria-hidden="true">
+        ★
+      </span>
+      {resolved.map((v) => (
+        <span
+          key={v.voiceId}
           className={clsx(
-            'flex items-center gap-1.5 rounded px-2 py-1 text-sm transition-colors',
-            currentPinned
-              ? 'text-warn hover:bg-warn/10'
-              : 'text-muted hover:bg-panel2 hover:text-warn',
-            !current && 'cursor-not-allowed opacity-40',
+            'group inline-flex items-center gap-1 rounded-full border px-2 py-0.5',
+            v.voiceId === currentId
+              ? 'border-warn/50 bg-warn/10 text-text'
+              : 'border-line text-muted hover:border-warn/40 hover:text-text',
+            !v.live && 'opacity-50',
           )}
-          disabled={!current || (!currentPinned && atLimit)}
-          onClick={() => current && toggle(current.voice_id)}
-          aria-pressed={currentPinned}
-          data-testid="favourite-toggle"
-          title={
-            !current
-              ? t('favourites.noneSelected')
-              : !currentPinned && atLimit
-                ? t('favourites.limitReached', { max })
-                : currentPinned
-                  ? t('favourites.remove')
-                  : t('favourites.add')
-          }
         >
-          <span className="text-base leading-none">{currentPinned ? '★' : '☆'}</span>
-          <span>{currentPinned ? t('favourites.saved') : t('favourites.add')}</span>
-        </button>
-
-        <span className="text-muted-soft">|</span>
-
-        {resolved.length === 0 && pins.length === 0 && (
-          <span className="text-xs text-muted">{t('favourites.emptyHint')}</span>
-        )}
-
-        {resolved.map((v) => (
-          <span
-            key={v.voice_id}
-            className={clsx(
-              'group inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs',
-              v.voice_id === current?.voice_id
-                ? 'border-warn/50 bg-warn/10 text-text'
-                : 'border-line text-muted hover:border-warn/40 hover:text-text',
-            )}
+          <button
+            type="button"
+            className="max-w-[15rem] truncate"
+            onClick={() => {
+              const live = available.find((x) => x.voice_id === v.voiceId)
+              if (live) onPick(live)
+            }}
+            data-testid={`favourite-${v.voiceId}`}
+            title={v.language ? `${v.label} · ${v.language}` : v.label}
           >
-            <button
-              type="button"
-              className="max-w-[16rem] truncate"
-              onClick={() => onPick(v)}
-              data-testid={`favourite-${v.voice_id}`}
-              title={`${v.name} · ${v.languages[0]}`}
-            >
-              {v.name}
-            </button>
-            <button
-              type="button"
-              className="leading-none text-muted-soft hover:text-bad"
-              onClick={() => toggle(v.voice_id)}
-              aria-label={t('favourites.removeNamed', { name: v.name })}
-              title={t('favourites.removeNamed', { name: v.name })}
-              data-testid={`favourite-remove-${v.voice_id}`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-
-        {stale.length > 0 && (
-          <span
-            className="inline-flex items-center gap-1 rounded border border-line px-2 py-0.5 text-xs text-muted-soft"
-            title={stale.join(', ')}
+            {v.label}
+          </button>
+          <button
+            type="button"
+            className="leading-none text-muted-soft hover:text-bad"
+            onClick={() => toggle(v.voiceId)}
+            aria-label={t('favourites.removeNamed', { name: v.label })}
+            title={t('favourites.removeNamed', { name: v.label })}
+            data-testid={`favourite-remove-${v.voiceId}`}
           >
-            {t('favourites.unavailable', { count: stale.length })}
-            <button
-              type="button"
-              className="leading-none hover:text-bad"
-              onClick={() => stale.forEach((id) => toggle(id))}
-              aria-label={t('favourites.clearUnavailable')}
-              data-testid="favourite-clear-stale"
-            >
-              ×
-            </button>
-          </span>
-        )}
-
-        {pins.length > 0 && (
-          <span className="ml-auto text-xs text-muted-soft">
-            {pins.length}/{max}
-          </span>
-        )}
-      </div>
+            ×
+          </button>
+        </span>
+      ))}
+      {staleCount > 0 && (
+        <span className="text-muted-soft" title={t('favourites.unavailableTitle')}>
+          {t('favourites.unavailable', { count: staleCount })}
+        </span>
+      )}
+      <span className="ml-auto text-muted-soft">
+        {rows.length}/{max}
+      </span>
     </div>
   )
 }

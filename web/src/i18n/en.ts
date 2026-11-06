@@ -89,6 +89,7 @@ const en = {
     reload: 'reload',
   },
   favourites: {
+    rowLabel: 'Favourite voices',
     add: 'Add to favourites',
     saved: 'In favourites',
     remove: 'Remove from favourites',
@@ -100,6 +101,9 @@ const en = {
     clearUnavailable: 'Clear unavailable favourites',
   },
   voices: {
+    favouritesTitle: 'Favourites',
+    favouritesCount: '{{count}} starred',
+    unavailableTitle: 'Their provider is disabled, so they cannot be synthesised right now.',
     loadFailed: 'Could not load voices. Check your admin token, then retry.',
     pin: 'Pin {{name}}',
     unpin: 'Unpin {{name}}',

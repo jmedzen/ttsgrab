@@ -41,6 +41,20 @@ security:
 # --------------------------------------------------------------------------------------
 # router — how a provider is chosen, and what happens when it fails
 # --------------------------------------------------------------------------------------
+# Favourite voices, seeded once into an empty database.
+#
+# Favourites are normally clicked in the UI and stored in the database, shared by everyone
+# using this instance. This block exists so a fresh deployment starts with your team's
+# shortlist instead of an empty one.
+#
+# Applied only when the favourites table is empty — removing one in the UI is permanent,
+# because config is a starting point and not a policy.
+favourites:
+  seed_enabled: false
+  seed:
+    - zh-TW-HsiaoChenNeural
+    - zh-TW-YunJheNeural
+
 router:
   # Used when a request names no policy and no provider.
   #   cheapest | fastest | best_quality | local_only | free_only | explicit

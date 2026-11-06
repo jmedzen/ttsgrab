@@ -92,6 +92,8 @@ async def build_context(settings: Settings, *, config_dir: Path | None = None) -
     if added_columns:
         logging.getLogger(__name__).info("schema upgraded in place: %s", ", ".join(added_columns))
 
+    await _seed_favourites(settings)
+
     registry = ProviderRegistry(settings)
     registry.build()
     await registry.startup_all()
@@ -130,3 +132,26 @@ async def build_context(settings: Settings, *, config_dir: Path | None = None) -
         pricing.version,
     )
     return ctx
+
+
+async def _seed_favourites(settings: object) -> None:
+    """Apply `favourites.seed` from config.yaml, once, to an empty table.
+
+    Only when empty: a user who removed a seeded favourite must not find it back after the
+    next restart. The config is a starting point, not a policy.
+    """
+    fav = getattr(settings, "favourites", None)
+    if fav is None or not getattr(fav, "seed_enabled", False) or not fav.seed:
+        return
+
+    from sqlalchemy import select
+
+    from ttsgrab.db.models import FavouriteVoice
+    from ttsgrab.db.session import session_scope
+
+    async with session_scope() as session:
+        if (await session.execute(select(FavouriteVoice.voice_id))).first() is not None:
+            return
+        for position, voice_id in enumerate(fav.seed):
+            session.add(FavouriteVoice(voice_id=voice_id, position=position))
+        logging.getLogger(__name__).info("seeded %d favourites from config", len(fav.seed))
