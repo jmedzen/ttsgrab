@@ -7,6 +7,7 @@ const en = {
     history: 'History',
     usage: 'Usage',
     keys: 'API Keys',
+    settings: 'Settings',
   },
   common: {
     loading: 'Loading…',
@@ -221,6 +222,30 @@ const en = {
     getKey: 'Create a free key at AI Studio',
     freeTierNote:
       'Gemini TTS free tier was cut to 10 requests per day in November 2026 — add a billed key for anything long.',
+  },
+  config: {
+    title: 'Settings',
+    subtitle: 'Everything the gateway reads, written to config.yaml.',
+    file: 'File',
+    fileExists: 'in use',
+    fileMissing: 'does not exist yet — saving creates it',
+    save: 'Save',
+    saving: 'Saving…',
+    unsaved: '{{count}} unsaved change(s)',
+    savedNote: 'Wrote {{count}} setting(s). Restart to apply.',
+    restartNote: 'Some values (port, database URL) only apply on restart; provider keys take effect immediately after one.',
+    envOverride: 'env',
+    envOverrideHint: 'An environment variable is set for this key and takes precedence over config.yaml.',
+    envOverrideNote: 'Some keys are shadowed by environment variables. Saving still writes the file, but the running service uses the env value.',
+    secretKeep: 'leave blank to keep current',
+    secretUnset: 'not set',
+    group: {
+      providers: 'Providers',
+      routing: 'Routing and cost',
+      output: 'Output and cache',
+      security: 'Security',
+      favourites: 'Favourites',
+    },
   },
   settings: {
     language: 'Language',

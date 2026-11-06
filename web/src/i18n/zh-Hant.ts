@@ -9,6 +9,7 @@ const zhHant: Translation = {
     history: '歷史',
     usage: '用量',
     keys: 'API 金鑰',
+    settings: '設定',
   },
   common: {
     loading: '載入中…',
@@ -223,6 +224,30 @@ const zhHant: Translation = {
     getKey: '前往 AI Studio 建立免費金鑰',
     freeTierNote:
       'Gemini TTS 免費額度在 2026 年 11 月被砍到每天 10 次——長文請改用付費金鑰。',
+  },
+  config: {
+    title: '設定',
+    subtitle: '閘道讀取的所有設定，全部寫進 config.yaml。',
+    file: '檔案',
+    fileExists: '使用中',
+    fileMissing: '尚未存在 — 儲存後會建立',
+    save: '儲存',
+    saving: '儲存中…',
+    unsaved: '{{count}} 項未儲存的變更',
+    savedNote: '已寫入 {{count}} 項設定，重新啟動後生效。',
+    restartNote: '部分設定（連接埠、資料庫位址）需重新啟動才生效；供應商金鑰在重啟後即可使用。',
+    envOverride: '環境變數',
+    envOverrideHint: '此設定有對應的環境變數，優先於 config.yaml。',
+    envOverrideNote: '部分設定被環境變數覆蓋。儲存仍會寫入檔案，但執行中的服務採用環境變數的值。',
+    secretKeep: '留空表示維持現有值',
+    secretUnset: '尚未設定',
+    group: {
+      providers: '供應商',
+      routing: '路由與成本',
+      output: '輸出與快取',
+      security: '安全性',
+      favourites: '最愛',
+    },
   },
   settings: {
     language: '語言',

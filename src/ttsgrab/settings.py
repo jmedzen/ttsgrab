@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -214,6 +214,10 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
         extra="ignore",
     )
+
+    # Which config file was read, for writing settings back to the same place. Not part of
+    # the schema (excluded from env and from dumps) — set by load_settings after parsing.
+    _config_path: Any = PrivateAttr(default=None)
 
     app_name: str = "ttsgrab"
     env: Literal["dev", "prod", "test"] = "dev"
@@ -450,6 +454,11 @@ def load_settings(config_path: str | os.PathLike[str] | None = None) -> Settings
     if os.environ.get("DATABASE_URL"):
         settings.database_url = _ensure_async_driver(os.environ["DATABASE_URL"])
     settings.database_url = settings.database_url or "sqlite+aiosqlite:///./data/ttsgrab.db"
+
+    # Remember which file was actually read, so a settings write goes back to the same
+    # place. Without this an operator running with TTSGRAB_CONFIG=/etc/ttsgrab.yaml would
+    # have the UI write ./config.yaml and silently lose the change.
+    settings._config_path = path
 
     settings.ensure_dirs()
     return settings

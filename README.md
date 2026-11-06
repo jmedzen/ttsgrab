@@ -39,6 +39,10 @@ make up          # or: docker compose --profile core up -d
 Open <http://localhost:8300>, type something, press **Synthesise**. That is Edge TTS, with
 no account and no key.
 
+Everything is configurable in the browser at **/settings**, which writes back to
+`config.yaml` and preserves your comments — including provider API keys. Environment
+variables still take precedence, and the page marks any key they shadow.
+
 Add cloud providers whenever you want them — the gateway boots fine without any:
 
 ```bash

@@ -18,6 +18,18 @@ export interface FavouriteVoice {
   created_at: string
 }
 
+/** A setting value as the API reports it, with secrets already masked. */
+export type SettingKind = 'bool' | 'int' | 'str' | 'secret' | 'list' | 'secret_list' | 'dict'
+
+export interface SettingsState {
+  path: string
+  exists: boolean
+  values: Record<string, unknown>
+  on_disk: Record<string, unknown>
+  env_overrides: { key: string; env_var: string }[]
+  editable: Record<string, SettingKind>
+}
+
 export interface Voice {
   provider: string
   voice_id: string
@@ -342,6 +354,14 @@ export const api = {
     if (params.freeOnly) q.set('free_only', 'true')
     if (params.cloning !== undefined) q.set('cloning', String(params.cloning))
     return json(`/v1/voices?${q.toString()}`)
+  },
+
+  async settings(): Promise<SettingsState> {
+    return json('/v1/settings')
+  },
+
+  async saveSettings(values: Record<string, unknown>): Promise<{ written: string[] }> {
+    return json('/v1/settings', { method: 'PUT', body: JSON.stringify({ values }) })
   },
 
   async favourites(): Promise<{ favourites: FavouriteVoice[] }> {

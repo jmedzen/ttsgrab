@@ -9,6 +9,7 @@ import Providers from './pages/Providers'
 import History from './pages/History'
 import Usage from './pages/Usage'
 import Keys from './pages/Keys'
+import Settings from './pages/Settings'
 import { setLanguage } from './i18n'
 import { api, type BuildInfo } from './lib/api'
 import ThemePicker from './components/ThemePicker'
@@ -22,6 +23,7 @@ const NAV = [
   { to: '/history', key: 'history' },
   { to: '/usage', key: 'usage' },
   { to: '/keys', key: 'keys' },
+  { to: '/settings', key: 'settings' },
 ] as const
 
 function useTheme() {
@@ -138,6 +140,7 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/usage" element={<Usage />} />
           <Route path="/keys" element={<Keys />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
 
