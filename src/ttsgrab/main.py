@@ -275,7 +275,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mounted only when the `mcp` extra is installed; a missing optional dependency must
     # never stop the gateway from booting.
     mcp_inner = None
-    settings.mcp.path.rstrip("/") if settings.mcp.enabled else None
     if settings.mcp.enabled:
         try:
             from ttsgrab import mcp_server

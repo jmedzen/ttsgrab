@@ -8,7 +8,7 @@
 #   docker compose -f docker-compose.distributed.yml up -d
 #
 #   # on the gateway, either in the UI (Providers → Add worker) or:
-#   curl -X POST http://gateway:8000/v1/workers \
+#   curl -X POST http://gateway:8300/v1/workers \
 #     -H 'Content-Type: application/json' \
 #     -d '{"name":"gpu-box","base_url":"http://192.168.1.42:8880","kind":"tts"}'
 #

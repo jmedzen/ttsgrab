@@ -137,14 +137,16 @@ typecheck-web: ## TypeScript check
 	@if [ -f .env ]; then echo ".env already exists — leaving it alone"; else \
 	  cp .env.example .env && \
 	  token=$$(openssl rand -hex 24) && \
-	  $(PYTHON) -c "import pathlib,sys; p=pathlib.Path('.env'); \
-	    p.write_text(p.read_text().replace('TTSGRAB_ADMIN_TOKEN=', 'TTSGRAB_ADMIN_TOKEN=' + sys.argv[1]))" $$token && \
+	  $(PYTHON) -c "import pathlib,sys; p=pathlib.Path('.env'); t=p.read_text(); \
+	    key='TTSGRAB_SECURITY__ADMIN_TOKEN='; \
+	    sys.exit('ERROR: %s not found in .env.example' % key) if key not in t else None; \
+	    p.write_text(t.replace(key, key + sys.argv[1], 1))" $$token && \
 	  echo "Created .env with a generated admin token: $$token"; \
 	fi
 
 .PHONY: token
 token: ## Print the admin token from .env
-	@grep '^TTSGRAB_ADMIN_TOKEN=' .env | cut -d= -f2-
+	@grep '^TTSGRAB_SECURITY__ADMIN_TOKEN=' .env | cut -d= -f2-
 
 .PHONY: clean
 clean: ## Remove build artefacts and caches

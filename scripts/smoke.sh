@@ -8,8 +8,12 @@
 
 set -uo pipefail
 
-BASE="${1:-http://127.0.0.1:8000}"
-TOKEN="${TTSGRAB_ADMIN_TOKEN:-}"
+BASE="${1:-http://127.0.0.1:8300}"
+# Accept both names. The settings variable is `TTSGRAB_SECURITY__ADMIN_TOKEN` (double
+# underscore, as everywhere else); `TTSGRAB_ADMIN_TOKEN` is the short form this script
+# documented first. Silently ignoring the documented one meant a correctly configured shell
+# still ran unauthenticated and reported a wall of 401s as failures.
+TOKEN="${TTSGRAB_ADMIN_TOKEN:-${TTSGRAB_SECURITY__ADMIN_TOKEN:-}}"
 pass=0
 fail=0
 skip=0

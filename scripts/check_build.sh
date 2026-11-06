@@ -5,10 +5,10 @@
 # "build 0" and looks perfectly healthy. Nothing else in the test suite can see it,
 # because every other check runs against source rather than against an image.
 #
-#   ./scripts/check_build.sh http://127.0.0.1:8000 42
+#   ./scripts/check_build.sh http://127.0.0.1:8300 42
 set -euo pipefail
 
-BASE="${1:-http://127.0.0.1:8000}"
+BASE="${1:-http://127.0.0.1:8300}"
 EXPECTED="${2:-}"
 
 body=$(curl -sf "$BASE/healthz")

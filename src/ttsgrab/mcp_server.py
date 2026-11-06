@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hmac
 import importlib
 import json
 import os
@@ -56,6 +57,53 @@ MCP = _ServerClass(
         "Check the returned 'unsupported' list — it names parameters the provider ignored."
     ),
 )
+
+
+class _RequireBearer:
+    """Reject MCP requests without the configured bearer token.
+
+    Pure ASGI rather than `BaseHTTPMiddleware`: this wraps a streaming transport, and the
+    buffering that middleware does would break the event stream. It also has to be
+    transparent to the lifespan, or the SDK's task group never starts.
+    """
+
+    def __init__(self, app: Any, token: str) -> None:
+        self.app = app
+        self.token = token
+
+    def __getattr__(self, name: str) -> Any:
+        # The caller runs `inner.router.lifespan_context(inner)` to start the SDK's task
+        # group. Wrapping transparently keeps that working — without it the lifespan
+        # crashes and every tool call fails with "Task group is not initialized".
+        return getattr(self.app, name)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        presented = ""
+        for name, value in scope.get("headers") or []:
+            if name == b"authorization":
+                presented = value.decode("latin-1")
+                break
+        if not hmac.compare_digest(presented, f"Bearer {self.token}"):
+            body = b'{"error":{"code":"unauthorized","message":"MCP requires a bearer token"}}'
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"www-authenticate", b"Bearer"),
+                        (b"content-length", str(len(body)).encode()),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+            return
+
+        await self.app(scope, receive, send)
 
 
 # When mounted inside the gateway, tools call the app in-process instead of over
@@ -318,6 +366,18 @@ def mount(app, path: str = "/mcp"):
             enable_dns_rebinding_protection=False
         )
     inner = MCP.streamable_http_app(**kwargs)
+
+    # The mount itself has no auth: the SDK serves every tool to anyone who can reach it,
+    # and those tools synthesise speech and spend the operator's provider budget. Refusing
+    # to mount without a token (in main.py) closes the "no token configured" case; this
+    # closes the "token configured but never checked" case, which was the wider one.
+    expected = (
+        security.mcp.token or security.security.admin_token
+        if security is not None
+        else os.environ.get("TTSGRAB_MCP_TOKEN")
+    )
+    if expected:
+        inner = _RequireBearer(inner, expected)
     app.mount(path, inner)
     return inner
 

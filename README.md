@@ -157,7 +157,9 @@ with client.audio.speech.with_streaming_response.create(
 ```
 
 Only `base_url` changes. MCP clients get `synthesize_speech`, `list_voices`,
-`list_providers`, `get_usage` at `/mcp`. Machines read `/llms.txt` and `/agents.md`; humans
+`list_providers`, `get_usage` at `/mcp`, and must send `Authorization: Bearer <token>` using
+`TTSGRAB_MCP_TOKEN` (or the admin token). The mount is refused outright when neither is set:
+its tools spend money, so an open transport is not an option. Machines read `/llms.txt` and `/agents.md`; humans
 read `/docs` (OpenAPI) or `/redoc`.
 
 ---
@@ -324,8 +326,9 @@ the GPU workers need CUDA and therefore amd64. See
 [docs/deployment.md](docs/deployment.md).
 
 The gateway binds to `127.0.0.1` by default. It is not hardened for the open internet:
-put Caddy or Traefik in front, and set `TTSGRAB_ADMIN_TOKEN` before exposing it to a LAN
-you do not control.
+put Caddy or Traefik in front, and set `TTSGRAB_SECURITY__ADMIN_TOKEN` before exposing it to
+a LAN you do not control. (The double underscore is the nesting separator; `make .env`
+generates one for you and `make token` prints it.)
 
 ---
 
@@ -375,7 +378,8 @@ make test-e2e                              # Playwright: real synthesis in the b
 `scripts/smoke.sh` walks the brief's acceptance criteria and prints one line per check.
 Checks that need credentials it does not have are reported as **skipped**, not as passes.
 
-The smoke script reads `TTSGRAB_ADMIN_TOKEN`; without it, any deployment that *has* an admin
+The smoke script reads `TTSGRAB_ADMIN_TOKEN` (or the settings form,
+`TTSGRAB_SECURITY__ADMIN_TOKEN`); without it, any deployment that *has* an admin
 token will report failures that are really 401s. That is why the token is a variable rather
 than a hardcoded assumption — but it does mean a bare `./scripts/smoke.sh` against a
 protected server looks broken. Pass the token:
