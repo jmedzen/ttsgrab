@@ -137,6 +137,7 @@ free provider, because that turns a loud failure into a silent quality regressio
 | **History** | Everything you have synthesised, replayable, deletable |
 | **Usage** | Characters, cost, free-tier headroom, daily series |
 | **API Keys** | Per-key provider allowlists, rate limits, monthly quotas |
+| **Settings** | Every setting the service reads, editable in the browser, written back to `config.yaml` |
 
 **Six themes** (Midnight, Ink, Forest, Paper, Mist, Sakura), 繁體中文 / English, responsive.
 Voices you use often can be starred — from the picker or straight from the Playground's
@@ -251,8 +252,22 @@ abstraction over TTS is only useful if it tells you which engine you actually go
 
 ## Configuration
 
-`config.yaml` for structure, environment variables for secrets, env wins over the file. See
-[`.env.example`](.env.example) for every knob.
+There is one page at **`/settings`** listing every setting the gateway reads, grouped, with
+the dotted key shown under each field. Saving writes `config.yaml` — comments and all, with
+an atomic replace and mode `0600`.
+
+That includes provider API keys. This is a single-tenant gateway, so one known file is easier
+to reason about than four places that can disagree; the alternative was a key pasted into the
+UI living only in memory until the next restart.
+
+Precedence is unchanged and the page is honest about it: **environment variables → `.env` →
+`config.yaml` → defaults.** When a `TTSGRAB_*` variable shadows a key, the field is marked
+rather than showing a value that has no effect. A masked secret is never pre-filled — saving
+the mask back would replace a real key with `••••1234`.
+
+Some values only apply on restart (port, database URL); provider keys take effect after one.
+The page says so instead of implying otherwise. See [`.env.example`](.env.example) for every
+knob in environment form.
 
 ```yaml
 router:
@@ -303,6 +318,25 @@ and a job `webhook_url` both make the gateway fetch a URL someone else chose. Bo
 same SSRF check: non-HTTP schemes, link-local ranges (including cloud metadata at
 `169.254.169.254`) and — for webhooks — private ranges are refused unless you opt in with
 `security.allow_private_webhooks: true` (set it when your receiver is a bot on the LAN).
+
+**MCP is refused without a token.** Its tools synthesise speech, so an open transport is an
+open wallet. Mount the extra with `TTSGRAB_MCP_TOKEN` (or an admin token) set, and clients
+send `Authorization: Bearer <token>`. Without either, the gateway logs why and does not mount
+it rather than serving every tool to anyone who can reach the port.
+
+**Every synthesis path carries the same restrictions.** A key's provider allowlist is checked
+on `/v1/tts`, `/v1/tts/stream`, `/v1/compare`, `/v1/jobs` and `/v1/audio/speech` — a
+restricted key must name its provider, because only then can the restriction be applied
+before routing. Its monthly character quota is enforced the same way. History and audio are
+scoped to the key that created them; the operator principal sees everything, because the
+operator is the person debugging.
+
+**Nothing is deleted unless you say so.** History rows, audio files and idempotency records
+grow with every synthesis. `retention.enabled` turns on hourly pruning by age *and* count
+together — age alone lets a busy day fill the disk, count alone deletes a quiet machine's most
+recent work. The newest `keep_records` are always kept, and pruning below `MIN_KEEP` is
+refused so a mistyped config cannot empty the history. It is off by default: deleting
+someone's data is not an upgrade side effect.
 
 The rest is ordinary hardening, covered in [docs/deployment.md](docs/deployment.md):
 `max_text_chars` and `max_request_body_bytes` are enforced before the body is parsed, uploads
@@ -370,7 +404,7 @@ context has no `.git`.
 ## Verifying it works
 
 ```bash
-make test                                  # pytest: 276 tests, ~76% statement coverage
+make test                                  # pytest: 385 tests, ~78% statement coverage
 make test-e2e                              # Playwright: real synthesis in the browser
 ./scripts/smoke.sh http://127.0.0.1:8300   # the acceptance checklist, live
 ```
@@ -401,7 +435,7 @@ Honest status of the acceptance list:
 | 7 | No keys in logs, frontend or git history | ✅ log scrubber + secret-pattern smoke check; `gitleaks` in CI |
 
 What CI proves on every push: lint, mypy, the full pytest suite on Python 3.11 and 3.12, the SPA
-typecheck and build, six Playwright tests against a live server, the 13-check smoke script,
+typecheck and build, 25 Playwright tests against a live server, the 13-check smoke script,
 a `linux/amd64` gateway image build, a container boot that synthesises real audio, the CPU
 worker image, and a full-history secret scan.
 
